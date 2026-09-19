@@ -1,0 +1,12 @@
+{
+  "name": "lumen",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lumen ambient scene controller with Web Bluetooth and mock keys",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "check": "node --check server.mjs && node --check src/app.js && node --check src/bluetooth.js && node --check src/buttonMap.js && node --check src/scenes.js"
+  }
+}
