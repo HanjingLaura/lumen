@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#101420" />
+    <title>Lumen · ambient scenes</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Lumen home"><span class="brand-mark">✦</span><span>Lumen</span></a>
+        <div class="topbar-note"><span class="status-dot" id="connectionDot"></span><span id="connectionLabel">Mock 模式</span></div>
+      </header>
+
+      <section class="hero" aria-labelledby="pageTitle">
+        <div class="hero-copy">
+          <p class="eyebrow">CONFIGURABLE AMBIENT SCENES</p>
+          <h1 id="pageTitle">让空间跟着<br /><em>一个按键</em>呼吸。</h1>
+          <p class="lede">选择一组氛围，接入实体按键，或直接用键盘 1–4 开始预览。</p>
+          <div class="hero-actions">
+            <button class="button button-primary" id="connectButton" type="button">连接 Lumen 按键</button>
+            <button class="button button-quiet" id="resetMapButton" type="button">恢复默认映射</button>
+          </div>
+          <p class="bluetooth-note" id="bluetoothNote">安全上下文（HTTPS 或 localhost）下可连接 Web Bluetooth。</p>
+        </div>
+        <div class="scene-card" id="sceneCard">
+          <canvas id="sceneCanvas" aria-label="当前氛围场景动画"></canvas>
+          <div class="scene-overlay"></div>
+          <div class="scene-card-content">
+            <p class="eyebrow" id="sceneKicker">RAIN / 01</p>
+            <h2 id="sceneTitle">雨幕白噪音</h2>
+            <p id="sceneDescription">细密雨线与低对比蓝色，让注意力慢慢沉下来。</p>
+            <div class="scene-meta"><span class="live-pulse"></span><span id="sceneSource">按键 1 · Mock</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="workspace" aria-labelledby="mockTitle">
+        <div class="section-heading">
+          <div><p class="eyebrow">DEVELOPMENT CONSOLE</p><h2 id="mockTitle">四键预览</h2></div>
+          <p class="hint">按下键盘 <kbd>1</kbd>–<kbd>4</kbd>，或点击下方按键</p>
+        </div>
+        <div class="key-grid" id="keyGrid"></div>
+        <div class="mapping-panel">
+          <div class="section-heading compact"><div><p class="eyebrow">BUTTON MAP</p><h2>按键映射</h2></div><span class="saved-label" id="savedLabel">保存在此浏览器</span></div>
+          <div class="mapping-grid" id="mappingGrid"></div>
+        </div>
+      </section>
+
+      <footer class="footer"><span>Lumen · scene engine scaffold</span><span>BLE 只传递场景编号，内容留在前端</span></footer>
+    </main>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/src/app.js"></script>
+  </body>
+</html>
