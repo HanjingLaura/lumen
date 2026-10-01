@@ -2,7 +2,7 @@
   "name": "lumen",
   "version": "0.1.0",
   "private": true,
-  "description": "Lumen ambient scene controller with Web Bluetooth and mock keys",
+  "description": "Lumen fullscreen scene placeholders with a hardware debug bench",
   "type": "module",
   "scripts": {
     "dev": "node server.mjs",

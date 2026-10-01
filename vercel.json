@@ -1,0 +1,11 @@
+{
+  "framework": null,
+  "installCommand": "",
+  "buildCommand": "",
+  "outputDirectory": ".",
+  "rewrites": [
+    { "source": "/lumen", "destination": "/index.html" },
+    { "source": "/lumen/", "destination": "/index.html" },
+    { "source": "/lumen/:path*", "destination": "/:path*" }
+  ]
+}

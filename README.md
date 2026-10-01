@@ -1,6 +1,6 @@
 # Lumen
 
-Lumen 是一个可配置的氛围场景控制器：浏览器负责播放和渲染场景，实体按键通过 BLE 发送一个很小的场景编号来切场。当前仓库是可运行的软件骨架，适合先用 Mock 按键迭代，再接入硬件。
+Lumen 用全屏场景承接实体按键：浏览器只按编号切场，实体按键通过 BLE 发送一个很小的场景编号。当前四个场景是全屏白底占位，硬件连接和映射放在右上角的调试工作台里。
 
 ## 安装与运行
 
@@ -8,17 +8,16 @@ Lumen 是一个可配置的氛围场景控制器：浏览器负责播放和渲�
 
 ```bash
 npm run dev
-# 打开 http://localhost:4173
+# 打开 http://localhost:4173/lumen/
 ```
 
 `npm run check` 会检查 Node 与前端模块的语法。部署静态文件时，`index.html`、`styles.css` 和 `src/` 可以交给任意静态服务器；Web Bluetooth 需要 HTTPS 或 `localhost` 这样的安全上下文。
 
 ## 当前功能
 
-- `src/scenes.js` 提供 4 个数据化场景：雨幕白噪音、低频鼓点、余温壁炉、潮汐呼吸。Canvas 渲染器目前是轻量占位，场景配置可继续扩展。
-- 页面底部的 **BUTTON MAP** 是可编辑的 `buttonMap`。默认映射为 `1 → scene 1`、`2 → scene 2`、`3 → scene 3`、`4 → scene 4`，改动保存在浏览器 `localStorage`。
-- 四个 Mock 按键和键盘 `1`–`4` 都会触发切场，方便没有硬件时开发。
-- 点击“连接 Lumen 按键”会按 `Lumen-` 名称前缀扫描设备。浏览器不支持 Web Bluetooth、页面不是安全上下文、设备断开或用户取消选择时，页面会保留 Mock 模式并给出提示。
+- 四个场景都是全屏白底占位。当前场景号显示在左上角，键盘 `1`–`4` 或实体按键会整屏切换。
+- 右上角的「调试」打开硬件工作台：连接 Lumen 按键、Mock 按键，以及可编辑的 `buttonMap`。默认映射为 `1 → scene 1`、`2 → scene 2`、`3 → scene 3`、`4 → scene 4`，改动保存在浏览器 `localStorage`。
+- 工作台里的「连接 Lumen 按键」会按 `Lumen-` 名称前缀扫描设备。浏览器不支持 Web Bluetooth、页面不是安全上下文、设备断开或用户取消选择时，页面会保留 Mock 模式并给出提示。
 
 ## BLE 协议
 
