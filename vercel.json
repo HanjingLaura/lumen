@@ -2,5 +2,10 @@
   "framework": null,
   "installCommand": "",
   "buildCommand": "",
-  "outputDirectory": "."
+  "outputDirectory": ".",
+  "rewrites": [
+    { "source": "/lumen", "destination": "/index.html" },
+    { "source": "/lumen/", "destination": "/index.html" },
+    { "source": "/lumen/:path*", "destination": "/:path*" }
+  ]
 }

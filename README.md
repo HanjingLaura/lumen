@@ -8,7 +8,7 @@ Lumen 用全屏场景承接实体按键：浏览器只按编号切场，实体�
 
 ```bash
 npm run dev
-# 打开 http://localhost:4173
+# 打开 http://localhost:4173/lumen/
 ```
 
 `npm run check` 会检查 Node 与前端模块的语法。部署静态文件时，`index.html`、`styles.css` 和 `src/` 可以交给任意静态服务器；Web Bluetooth 需要 HTTPS 或 `localhost` 这样的安全上下文。

@@ -16,7 +16,13 @@ const contentTypes = {
 
 const server = createServer(async (request, response) => {
   const requestPath = decodeURIComponent(new URL(request.url, `http://${request.headers.host}`).pathname);
-  const relativePath = requestPath === '/' ? 'index.html' : requestPath.slice(1);
+  if (requestPath === '/' || requestPath === '/lumen') {
+    response.writeHead(308, { Location: '/lumen/' });
+    response.end();
+    return;
+  }
+  const pathname = requestPath.startsWith('/lumen/') ? requestPath.slice('/lumen'.length) : requestPath;
+  const relativePath = pathname === '/' ? 'index.html' : pathname.slice(1);
   const filePath = normalize(join(root, relativePath));
 
   if (!filePath.startsWith(rootPrefix)) {
