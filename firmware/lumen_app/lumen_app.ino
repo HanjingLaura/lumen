@@ -1,7 +1,8 @@
-// Lumen local debug framework (ESP32-S3). No BLE / no WiFi.
+// Lumen local debug framework (ESP32-S3) + BLE UART notify.
 // Arduino IDE: Board "ESP32S3 Dev Module".
 // Using the TTL/CH340 USB port: Tools > USB CDC On Boot: Disabled.
 
+#include "ble_link.h"
 #include "config.h"
 #include "hw_display.h"
 #include "scene.h"
@@ -29,9 +30,7 @@ static void enterScene(uint8_t index) {
   const Scene &s = SCENES[sceneIndex];
   Serial.print("SCENE:");
   Serial.println(s.id);
-  // TODO: BLE UART notify of "SCENE:n" (Nordic UART UUIDs:
-  // service 6e400001-b5a3-f393-e0a9-e50e24dcca9e,
-  // TX/notify 6e400003-b5a3-f393-e0a9-e50e24dcca9e).
+  bleNotifyScene(s.id);
   s.enter();
 }
 
@@ -59,6 +58,7 @@ void setup() {
   pinMode(PIN_BTN4, INPUT_PULLUP);
 
   displayBegin();  // if no OLED, serial-only still works
+  bleBegin();
 
   Serial.println("LUMEN READY");
   enterScene(0);  // boot scene 1
@@ -66,5 +66,10 @@ void setup() {
 
 void loop() {
   pollButtons();
+  blePoll();
+  uint8_t rxScene = 0;
+  if (bleTakeRxScene(&rxScene) && rxScene >= 1 && rxScene <= SCENE_COUNT) {
+    enterScene(rxScene - 1);
+  }
   SCENES[sceneIndex].loop();
 }
