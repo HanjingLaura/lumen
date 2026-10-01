@@ -5,6 +5,9 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLEAdvertising.h>
+#if defined(CONFIG_BLUEDROID_ENABLED)
+#include <BLE2902.h>
+#endif
 #include <string.h>
 
 #include "esp_mac.h"
@@ -23,8 +26,11 @@ static volatile bool wasConnected = false;
 static volatile bool subscribed = false;
 static volatile bool notifyPending = false;
 static volatile bool restartAdv = false;
+static volatile bool retry300Done = false;
+static volatile bool retry1000Done = false;
 static volatile uint8_t rxQueuedScene = 0;
 static volatile uint32_t restartAdvAtMs = 0;
+static volatile uint32_t connectedAtMs = 0;
 
 static char rxBuf[32];
 static uint8_t rxLen = 0;
@@ -99,13 +105,20 @@ class ServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer *pServer) override {
     (void)pServer;
     connected = true;
-    notifyPending = true;
+    subscribed = false;
+    notifyPending = false;
+    retry300Done = false;
+    retry1000Done = false;
+    connectedAtMs = millis();
   }
 
   void onDisconnect(BLEServer *pServer) override {
     (void)pServer;
     connected = false;
     subscribed = false;
+    notifyPending = false;
+    retry300Done = false;
+    retry1000Done = false;
     restartAdvAtMs = millis();
     restartAdv = true;
   }
@@ -113,6 +126,7 @@ class ServerCallbacks : public BLEServerCallbacks {
 
 class TxCallbacks : public BLECharacteristicCallbacks {
 #if defined(CONFIG_NIMBLE_ENABLED)
+  // Default esp32s3 3.3.x host is NimBLE; CCCD write arrives here, not via BLE2902.
   void onSubscribe(BLECharacteristic *pCharacteristic, ble_gap_conn_desc *desc, uint16_t subValue) override {
     (void)pCharacteristic;
     (void)desc;
@@ -120,13 +134,19 @@ class TxCallbacks : public BLECharacteristicCallbacks {
     if (subscribed) notifyPending = true;
   }
 #endif
+};
 
-  void onStatus(BLECharacteristic *pCharacteristic, Status s, uint32_t code) override {
-    (void)pCharacteristic;
-    (void)code;
-    if (s == SUCCESS_NOTIFY) subscribed = true;
+#if defined(CONFIG_BLUEDROID_ENABLED)
+class CccdCallbacks : public BLEDescriptorCallbacks {
+  void onWrite(BLEDescriptor *descriptor) override {
+    const uint8_t *value = descriptor->getValue();
+    const size_t len = descriptor->getLength();
+    const bool notifyOn = (len >= 1 && value != nullptr && (value[0] & 0x01) != 0);
+    subscribed = notifyOn;
+    if (notifyOn) notifyPending = true;
   }
 };
+#endif
 
 class RxCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharacteristic) override {
@@ -156,7 +176,13 @@ void bleBegin() {
   // TX: web client startNotifications() on this UUID (src/bluetooth.js).
   txChar = service->createCharacteristic(NUS_TX_UUID, BLECharacteristic::PROPERTY_NOTIFY);
   txChar->setCallbacks(new TxCallbacks());
-  // NimBLE (esp32 3.3.x) adds CCCD 0x2902 automatically for PROPERTY_NOTIFY.
+  // NimBLE (esp32s3 3.3.x default) auto-adds CCCD; onSubscribe handles subscribe.
+  // Bluedroid needs an explicit 0x2902 with a write callback.
+#if defined(CONFIG_BLUEDROID_ENABLED)
+  BLE2902 *cccd = new BLE2902();
+  cccd->setCallbacks(new CccdCallbacks());
+  txChar->addDescriptor(cccd);
+#endif
 
   // RX: live page does not write; accept SCENE:n for nRF Connect / future web commands.
   BLECharacteristic *rxChar = service->createCharacteristic(
@@ -184,9 +210,24 @@ void blePoll() {
     startAdvertising();
   }
 
+  bool sentThisPoll = false;
   if (connected && notifyPending) {
     notifyPending = false;
     sendSceneNotify();
+    sentThisPoll = true;
+  }
+
+  // Fallback: one notify at ~300 ms and one at ~1000 ms after connect, only if subscribed.
+  if (connected && subscribed) {
+    const uint32_t elapsed = millis() - connectedAtMs;
+    if (!retry300Done && elapsed >= 300) {
+      retry300Done = true;
+      if (!sentThisPoll) sendSceneNotify();
+    }
+    if (!retry1000Done && elapsed >= 1000) {
+      retry1000Done = true;
+      if (!sentThisPoll) sendSceneNotify();
+    }
   }
 }
 
