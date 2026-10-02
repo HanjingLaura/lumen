@@ -11,6 +11,15 @@ button { font: inherit; cursor: pointer; }
 #skyCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
 .scene[data-scene="3"] { background: #0075ff; color: #f4f7fb; }
 .scene[data-scene="3"] #skyCanvas { display: block; }
+#snowCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
+.scene[data-scene="4"] { background: #07101c; color: #f4f7fb; }
+.scene[data-scene="4"] #snowCanvas { display: block; }
+.scene[data-scene="4"] .bench-entry {
+  z-index: 2;
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(7, 16, 28, 0.35);
+  color: #f4f7fb;
+}
 .scene[data-scene="3"] .bench-entry {
   z-index: 2;
   border-color: rgba(255, 255, 255, 0.35);

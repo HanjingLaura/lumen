@@ -1,3 +1,4 @@
+import { mountSnow } from './snow/stage.js';
 import { mountClouds } from './sky/clouds.js';
 import { mountRain } from './rain/stage.js';
 import { LumenBluetooth } from './bluetooth.js';
@@ -8,6 +9,7 @@ const $ = (selector) => document.querySelector(selector);
 const state = { sceneId: 1, buttonId: 1, source: 'Mock', buttonMap: loadButtonMap() };
 const rain = mountRain($('#sceneCanvas'));
 const clouds = mountClouds($('#skyCanvas'));
+const snow = mountSnow($('#snowCanvas'));
 
 function announce(message) {
   $('#toast').textContent = message;
@@ -23,6 +25,7 @@ function activateScene(sceneId, source = 'Mock', buttonId = null) {
   $('#scene').dataset.scene = String(scene.id);
   rain?.setActive(scene.id === 1);
   clouds?.setActive(scene.id === 3);
+  snow?.setActive(scene.id === 4);
   document.querySelectorAll('.key').forEach((key) => key.classList.toggle('active', Number(key.dataset.button) === buttonId));
 }
 
@@ -54,6 +57,7 @@ function renderMapping() {
 
 function unlockAudio() {
   rain?.unlock();
+  snow?.unlock();
 }
 window.addEventListener('pointerdown', unlockAudio);
 document.addEventListener('keydown', (event) => {
