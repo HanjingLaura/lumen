@@ -49,11 +49,11 @@ static const float DECAY_FRAC = 0.50f;            // 衰减门槛：确认窗口
 static const uint32_t CLAP_REFRACTORY_MS = 120;   // 两次拍手之间的不应期
 static const uint32_t ECHO_WINDOW_MS = 300;       // 确认后这么久内，新候选须够响，否则当回声/尾巴
 static const float ECHO_REL_MIN = 0.50f;          // 回声窗内：新 peak >= 上一拍 peak × 此比例（真双击够得着）
-static const uint32_t DOUBLE_CLAP_MIN_MS = 150;   // 双击：两拍间隔下限
-static const uint32_t DOUBLE_CLAP_MAX_MS = 600;   // 双击：两拍间隔上限
-static const uint32_t DOUBLE_PRE_QUIET_MS = 600;  // 第一拍之前要安静这么久，才有资格组双击
-static const uint32_t DOUBLE_POST_QUIET_MS = 400; // 第二拍之后再等这么久，没有第三拍才打 DOUBLE_CLAP
-static const uint32_t BURST_PRINT_MS = 1000;      // BURST 提示限速
+static const uint32_t CLAP_GAP_MIN_MS = 150;      // 同一串里，下一拍距上一拍至少这么久
+static const uint32_t CLAP_GAP_MAX_MS = 600;      // 同一串里，下一拍距上一拍至多这么久
+static const uint32_t SEQ_PRE_QUIET_MS = 600;     // 开新串：这一拍之前要安静这么久
+static const uint32_t SEQ_END_QUIET_MS = 600;     // 最后一拍后再安静这么久，结束并输出 CLAPS:n
+static const uint8_t MAX_CLAPS = 4;               // 超过则 CLAPS_DROP，不切场景
 static const uint32_t DBG_EVERY_MS = 1000;        // 每秒一行 DBG，看背景有没有跟上
 
 static I2SClass i2s;
@@ -87,11 +87,9 @@ static uint32_t lastDbgMs = 0;
 static uint32_t lastClapMs = 0;
 static float lastConfirmedPeak = 0.0f;
 static uint32_t lastLoudMs = 0;
-static uint32_t lastClapForDoubleMs = 0;
-static bool firstClapHadQuiet = false;
-static bool pendingDouble = false;
-static uint32_t pendingDoubleDueMs = 0;
-static uint32_t lastBurstMs = 0;
+static bool seqActive = false;
+static uint8_t seqCount = 0;
+static uint32_t seqLastMs = 0;
 static float candPeak = 0.0f;
 static float candBase = 0.0f;
 static float candRatio = 0.0f;
@@ -170,11 +168,9 @@ static void resetClapDetector(uint32_t now) {
   lastClapMs = 0;
   lastConfirmedPeak = 0.0f;
   lastLoudMs = 0;
-  lastClapForDoubleMs = 0;
-  firstClapHadQuiet = false;
-  pendingDouble = false;
-  pendingDoubleDueMs = 0;
-  lastBurstMs = now;
+  seqActive = false;
+  seqCount = 0;
+  seqLastMs = 0;
   candPeak = 0.0f;
   candBase = 0.0f;
   candRatio = 0.0f;
@@ -243,48 +239,52 @@ static void maybePrintDbg(uint32_t now) {
   Serial.println(static_cast<long>(baselinePeak + 0.5f));
 }
 
-static void maybePrintBurst(uint32_t now) {
-  if ((now - lastBurstMs) < BURST_PRINT_MS) {
+static void emitClapSequence() {
+  if (!seqActive || seqCount == 0) {
     return;
   }
-  lastBurstMs = now;
-  Serial.println("BURST");
+  if (seqCount >= 1 && seqCount <= MAX_CLAPS) {
+    Serial.print("CLAPS:");
+    Serial.println(seqCount);
+  } else {
+    Serial.print("CLAPS_DROP n=");
+    Serial.println(seqCount);
+  }
+  seqActive = false;
+  seqCount = 0;
 }
 
-static void pollPendingDouble(uint32_t now) {
-  if (!pendingDouble || (now < pendingDoubleDueMs)) {
-    return;
+static void pollSeqEnd(uint32_t now) {
+  if (seqActive && ((now - seqLastMs) >= SEQ_END_QUIET_MS)) {
+    emitClapSequence();
   }
-  Serial.println("DOUBLE_CLAP");
-  pendingDouble = false;
-  lastClapForDoubleMs = 0;
-  firstClapHadQuiet = false;
+}
+
+static void startSequence(uint32_t clapAt) {
+  seqActive = true;
+  seqCount = 1;
+  seqLastMs = clapAt;
 }
 
 static void onConfirmedClap(uint32_t clapAt) {
+  pollSeqEnd(clapAt);
   printClap(candPeak, candBase, candRatio, candCrest);
 
-  if (pendingDouble) {
-    pendingDouble = false;
-    lastClapForDoubleMs = 0;
-    firstClapHadQuiet = false;
-    maybePrintBurst(clapAt);
-  } else {
-    const bool hadPreQuiet =
-        (lastClapMs == 0) || ((clapAt - lastClapMs) >= DOUBLE_PRE_QUIET_MS);
-    if (firstClapHadQuiet && lastClapForDoubleMs != 0) {
-      const uint32_t gap = clapAt - lastClapForDoubleMs;
-      if (gap >= DOUBLE_CLAP_MIN_MS && gap <= DOUBLE_CLAP_MAX_MS) {
-        pendingDouble = true;
-        pendingDoubleDueMs = clapAt + DOUBLE_POST_QUIET_MS;
-      } else {
-        lastClapForDoubleMs = clapAt;
-        firstClapHadQuiet = hadPreQuiet;
-      }
+  const bool hadPreQuiet = (lastClapMs == 0) || ((clapAt - lastClapMs) >= SEQ_PRE_QUIET_MS);
+  if (seqActive) {
+    const uint32_t gap = clapAt - seqLastMs;
+    if (gap >= CLAP_GAP_MIN_MS && gap <= CLAP_GAP_MAX_MS) {
+      seqCount++;
+      seqLastMs = clapAt;
     } else {
-      lastClapForDoubleMs = clapAt;
-      firstClapHadQuiet = hadPreQuiet;
+      seqActive = false;
+      seqCount = 0;
+      if (hadPreQuiet) {
+        startSequence(clapAt);
+      }
     }
+  } else if (hadPreQuiet) {
+    startSequence(clapAt);
   }
 
   lastClapMs = clapAt;
@@ -303,7 +303,7 @@ static void confirmOrRejectClap(float followPeak, uint32_t now) {
 
 static void finishSubwindow() {
   const uint32_t now = millis();
-  pollPendingDouble(now);
+  pollSeqEnd(now);
   const uint32_t n = subCount;
   const float shortRms =
       (n > 0) ? static_cast<float>(sqrt(subSumSq / static_cast<double>(n))) : 0.0f;
@@ -539,7 +539,7 @@ void loop() {
   consumeSamples();
 
   const uint32_t now = millis();
-  pollPendingDouble(now);
+  pollSeqEnd(now);
   if ((now - windowStartMs) < PRINT_RMS_EVERY_MS) {
     return;
   }
