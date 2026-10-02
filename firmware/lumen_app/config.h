@@ -21,3 +21,8 @@
 #define OLED_W 128
 #define OLED_H 64
 #define OLED_ADDR 0x3C
+
+// INMP441 I2S 麦克风（L/R 接地 = 左声道）。拍手检测逻辑在 clap_detector。
+#define PIN_I2S_SCK 15  // INMP441 SCK / BCLK → GPIO15
+#define PIN_I2S_WS 16   // INMP441 WS → GPIO16
+#define PIN_I2S_SD 17   // INMP441 SD → GPIO17
