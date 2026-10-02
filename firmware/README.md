@@ -1,6 +1,6 @@
 # Lumen 固件（Windows + Arduino IDE 2.x）
 
-ESP32-S3 本地调试固件：四个按键直接切到场景 1–4，串口打印 `SCENE:n`。本 PR **不含 BLE**。已在 Arduino IDE 2.3.10 + **esp32 by Espressif 3.3.11** 上验证；任意 **3.3.x** 均可。
+ESP32-S3 本地调试固件：四个按键直接切到场景 1–4，串口打印 `SCENE:n`，并通过 BLE Nordic UART Notify 把同一行发给网页。已在 Arduino IDE 2.3.10 + **esp32 by Espressif 3.3.11** 上验证；任意 **3.3.x** 均可。
 
 ## 安装 Arduino IDE 与 esp32 开发板包
 
@@ -43,9 +43,12 @@ ESP32-S3 本地调试固件：四个按键直接切到场景 1–4，串口打�
 波特率 **115200**。上传后按一下 **RST**，应看到：
 
 ```text
+BLE ADV Lumen-XXXX
 LUMEN READY
 SCENE:1
 ```
+
+`XXXX` 是蓝牙 MAC 后两字节的十六进制（例如 `Lumen-01A4`）。连接网页后还会打印 `BLE CONNECTED`，断开后打印 `BLE DISCONNECTED`，然后再次 `BLE ADV Lumen-XXXX`。
 
 ## 接线
 
@@ -78,4 +81,23 @@ SCENE:4
 
 BTNn 直接切到场景 n，并刷新 OLED 占位数字。上电默认场景 1。
 
-后续 BLE 会用 Nordic UART：服务 `6e400001-b5a3-f393-e0a9-e50e24dcca9e`，TX/Notify `6e400003-b5a3-f393-e0a9-e50e24dcca9e`，通知同样是 `SCENE:n` 这一行。本 PR 未实现 BLE。
+BLE 使用 Nordic UART：服务 `6e400001-b5a3-f393-e0a9-e50e24dcca9e`，TX/Notify `6e400003-b5a3-f393-e0a9-e50e24dcca9e`，RX/Write `6e400002-b5a3-f393-e0a9-e50e24dcca9e`。通知同样是 `SCENE:n` 这一行（以 `\n` 结尾），和网页解析格式一致。
+
+## M2：用网页测 BLE（Windows 笔记本）
+
+网页会按名称前缀 `Lumen-` 扫描设备，并监听 TX Notify 上的 `SCENE:1`–`SCENE:4`。固件广播名是 `Lumen-XXXX`（MAC 后两字节）。
+
+1. 打开 Windows **蓝牙**（系统托盘或「设置 → 蓝牙和设备」），保持开启。
+2. 用 **Chrome 或 Edge**（不要用 Firefox）打开 https://hanjing-laura.vercel.app/lumen/
+3. 点右上角 **调试**，再点 **连接 Lumen 按键**（或「连接设备」）。
+4. 在弹出的设备列表里选 **Lumen-XXXX**（串口监视器里 `BLE ADV` 那一行就是这个名字）。
+5. 网页状态应变为「Lumen 已连接」，串口打印 `BLE CONNECTED`。连接成功后固件会立刻 Notify 当前场景（上电默认 `SCENE:1`）。
+6. 按板上 **BTN1–BTN4**：OLED/串口切场景，网页应跟着切到场景 1–4。
+
+### 连不上时
+
+- 确认笔记本蓝牙已打开，且 Chrome/Edge 已允许该站点使用蓝牙。
+- 关掉手机 nRF Connect、串口调试助手或其他已经连着这块板的 BLE 软件；Windows 同时只允许一个中央设备连接。
+- 必须用 **HTTPS** 页面（上面的 Vercel 地址即可）。`file://` 或普通 http 不能用 Web Bluetooth。
+- 只认名字以 `Lumen-` 开头的设备。如果列表是空的：看串口是否已有 `BLE ADV Lumen-XXXX`，板子是否已上电，笔记本是否离板子太远。
+- 网页当前**不会**往 RX 写命令；切场只靠板上按键。若用 nRF Connect 向 RX 写入 `SCENE:3` 或 `SCENE:3\n`，固件也会切到场景 3。
