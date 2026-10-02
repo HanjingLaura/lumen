@@ -18,7 +18,7 @@ function activateScene(sceneId, source = 'Mock', buttonId = null) {
   state.buttonId = buttonId;
   $('#sceneMark').textContent = String(scene.id);
   $('#scene').dataset.scene = String(scene.id);
-  setSkyActive(scene.id === 1);
+  setSkyActive(scene.id === 2);
   document.querySelectorAll('.key').forEach((key) => key.classList.toggle('active', Number(key.dataset.button) === buttonId));
 }
 
