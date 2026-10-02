@@ -6,18 +6,26 @@ button { font: inherit; cursor: pointer; }
 
 .scene { position: relative; min-height: 100%; background: #fff; }
 #sceneCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
+.sky {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
 .scene[data-scene="1"] { background: #07131c; color: #f4f7fb; }
 .scene[data-scene="1"] #sceneCanvas { display: block; }
+.scene[data-scene="2"] { background: #02030a; }
 #skyCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
 .scene[data-scene="3"] { background: #0075ff; color: #f4f7fb; }
 .scene[data-scene="3"] #skyCanvas { display: block; }
 #snowCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
-.scene[data-scene="4"] { background: #07101c; color: #f4f7fb; }
+.scene[data-scene="4"] { background: #8ea6c4; color: #f4f7fb; }
 .scene[data-scene="4"] #snowCanvas { display: block; }
 .scene[data-scene="4"] .bench-entry {
   z-index: 2;
-  border-color: rgba(255, 255, 255, 0.35);
-  background: rgba(7, 16, 28, 0.35);
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(70, 96, 130, 0.28);
   color: #f4f7fb;
 }
 .scene[data-scene="3"] .bench-entry {
@@ -28,9 +36,9 @@ button { font: inherit; cursor: pointer; }
 }
 .scene-mark {
   position: fixed;
+  z-index: 2;
   top: 22px;
   left: 26px;
-  z-index: 2;
   font-size: 22px;
   font-weight: 600;
   line-height: 1;
@@ -42,6 +50,8 @@ button { font: inherit; cursor: pointer; }
   background: rgba(7, 19, 28, 0.35);
   color: #f4f7fb;
 }
+.scene[data-scene="2"] .scene-mark,
+.scene[data-scene="2"] .bench-entry { visibility: hidden; }
 .bench-entry {
   position: fixed;
   z-index: 2;

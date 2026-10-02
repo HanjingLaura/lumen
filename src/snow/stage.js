@@ -38,7 +38,7 @@ export function mountSnow(canvas) {
   soft.width = 1600;
   soft.height = 900;
   const softContext = soft.getContext('2d');
-  softContext.filter = 'blur(5px)';
+  softContext.filter = 'blur(2px)';
   softContext.drawImage(plate, 0, 0);
   softContext.filter = 'none';
 
@@ -88,6 +88,8 @@ export function mountSnow(canvas) {
       vy: 0,
       phase: Math.random() * Math.PI * 2,
       spin: (Math.random() - 0.5) * 0.4,
+      age: 0,
+      life: 6 + Math.random() * 8,
     });
   }
 
@@ -114,6 +116,7 @@ export function mountSnow(canvas) {
         neighbor.y = (neighbor.y * neighbor.r + flake.y * flake.r) / (neighbor.r + flake.r);
         neighbor.r = Math.min(28, Math.sqrt(mass));
         neighbor.vy = Math.max(neighbor.vy, flake.vy) * 0.4;
+        neighbor.age = Math.min(neighbor.age, flake.age);
         glass.splice(index, 1);
         break;
       }
@@ -138,26 +141,32 @@ export function mountSnow(canvas) {
         flake.x = Math.random() * width;
       }
     }
-    for (const flake of glass) {
+    for (let index = glass.length - 1; index >= 0; index -= 1) {
+      const flake = glass[index];
+      flake.age += dt;
       const heavy = flake.r > 11;
       const target = heavy ? 8 + flake.r * 0.35 : 0.35 + flake.r * 0.04;
       flake.vy += (target - flake.vy) * dt * (heavy ? 0.35 : 0.12);
       flake.y += flake.vy * dt;
       flake.x += wind * (heavy ? 4 : 1.2) * dt + Math.sin(flake.phase) * dt * (heavy ? 2 : 0.6);
       flake.phase += dt * (0.15 + (flake.spin || 0));
-      if (flake.y > height + flake.r) {
-        flake.y = -flake.r;
-        flake.x = Math.random() * width;
-        flake.r = 3 + Math.random() * 5;
-        flake.vy = 0;
-      }
+      if (flake.age >= flake.life || flake.y > height + flake.r) glass.splice(index, 1);
     }
     if (Math.random() < dt * 2) mergeGlass();
   }
 
+  function glassFade(flake) {
+    const fadeIn = Math.min(1, flake.age / 0.4);
+    const fadeOut = Math.min(1, (flake.life - flake.age) / 1.7);
+    return Math.max(0, fadeIn * fadeOut);
+  }
+
   function drawGlass(context, flake) {
     const radius = flake.r;
+    const fade = glassFade(flake);
+    if (fade <= 0.01) return;
     context.save();
+    context.globalAlpha = fade;
     context.translate(flake.x, flake.y);
     context.fillStyle = 'rgba(70, 90, 120, 0.28)';
     context.beginPath();

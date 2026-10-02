@@ -1,7 +1,9 @@
 /**
  * Originkit Cloud Sky，按页面上的预设画满屏幕。
  * 云、卷云和太阳光都在着色器里算，没有贴图或视频。
+ * 云自己飘，不跟鼠标。
  */
+import { createCloudLoop, hushCloudLoop, playCloudLoop } from './cloud-audio.js';
 const NEAR_DRIFT = 0.055;
 const FAR_DRIFT = 0.026;
 const CIRRUS_DRIFT = 0.014;
@@ -229,9 +231,8 @@ export function mountClouds(canvas) {
   let nearX = 0;
   let farX = 0;
   let cirrusX = 0;
-  let leanX = 0;
-  let leanY = 0;
-  const pointer = { x: 0, y: 0, inside: false };
+  let audio = null;
+  let unlocked = false;
 
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -252,10 +253,8 @@ export function mountClouds(canvas) {
     }
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    const k = 1 - Math.exp(-LOOK.damping * 0.12 * dt);
-    leanX += ((pointer.inside ? pointer.x : 0) - leanX) * k;
-    leanY += ((pointer.inside ? pointer.y : 0) - leanY) * k;
-    const gust = 1 + leanX * LOOK.wind;
+    const breath = Math.sin(now * 0.00011) * 0.65 + Math.sin(now * 0.000037) * 0.35;
+    const gust = 1 + breath * 0.16;
     const rate = LOOK.speed * gust;
     nearX = (nearX - NEAR_DRIFT * rate * dt) % 1000;
     farX = (farX - FAR_DRIFT * rate * dt) % 1000;
@@ -272,7 +271,7 @@ export function mountClouds(canvas) {
     gl.uniform1f(u.shadow, LOOK.shadow);
     gl.uniform1f(u.cirrus, LOOK.cirrus);
     gl.uniform2f(u.sun, LOOK.sunX, LOOK.sunY);
-    gl.uniform2f(u.parallax, -leanX * LOOK.parallax * 0.07, -leanY * LOOK.parallax * 0.05);
+    gl.uniform2f(u.parallax, 0, 0);
     gl.uniform3f(u.zenith, LOOK.zenith[0], LOOK.zenith[1], LOOK.zenith[2]);
     gl.uniform3f(u.horizon, LOOK.horizon[0], LOOK.horizon[1], LOOK.horizon[2]);
     gl.uniform3f(u.cloud, LOOK.cloud[0], LOOK.cloud[1], LOOK.cloud[2]);
@@ -280,20 +279,6 @@ export function mountClouds(canvas) {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     raf = requestAnimationFrame(frame);
   }
-
-  function track(event) {
-    const bounds = canvas.getBoundingClientRect();
-    if (bounds.width <= 0 || bounds.height <= 0) return;
-    pointer.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
-    pointer.y = 1 - ((event.clientY - bounds.top) / bounds.height) * 2;
-    pointer.inside = true;
-  }
-
-  canvas.addEventListener('pointermove', track);
-  canvas.addEventListener('pointerenter', track);
-  canvas.addEventListener('pointerleave', () => {
-    pointer.inside = false;
-  });
 
   return {
     setActive(next) {
@@ -305,6 +290,14 @@ export function mountClouds(canvas) {
         cancelAnimationFrame(raf);
         raf = 0;
       }
+      if (next && unlocked) playCloudLoop(audio);
+      else hushCloudLoop(audio);
+    },
+    async unlock() {
+      if (unlocked) return;
+      unlocked = true;
+      if (!audio) audio = createCloudLoop();
+      if (active) await playCloudLoop(audio);
     },
   };
 }
