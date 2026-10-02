@@ -24,8 +24,9 @@ button { font: inherit; cursor: pointer; }
   line-height: 1;
   letter-spacing: 0;
 }
-.scene[data-scene="1"] .scene-mark,
-.scene[data-scene="2"] .scene-mark { color: rgba(236, 240, 248, 0.78); }
+.scene[data-scene="1"] .scene-mark { color: rgba(236, 240, 248, 0.78); }
+.scene[data-scene="2"] .scene-mark,
+.scene[data-scene="2"] .bench-entry { visibility: hidden; }
 .bench-entry {
   position: fixed;
   z-index: 2;
