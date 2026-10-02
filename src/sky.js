@@ -1,6 +1,6 @@
 /**
  * 场景 2：固定镜头的夜空。
- * 画法对齐 AstroShot（暗色天空、闪烁、传感器噪点、两类流星、山脊压住轨迹），
+ * 画法对齐 AstroShot 仓库（暗色天空、星等闪烁、尖头流星光带、山脊压住轨迹），
  * 镜头锁在地平线附近，银河用程序生成在右侧，不使用全景照片。
  */
 
@@ -9,7 +9,7 @@ const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').mat
 const SKY_HUE = 218;
 const SKY_SAT = 0.4;
 const SKY_BRIGHTNESS = 0.67;
-const METEOR_RATE = 18;
+const METEOR_RATE = 7;
 const VISIBLE_MAGNITUDE = 7.43;
 const EXPOSURE_GAIN = 2.33;
 const SENSOR_NOISE = 0.28;
@@ -28,7 +28,7 @@ export function createSky(canvas) {
   let meteors = [];
   let last = 0;
   let nextMeteor = 0;
-  let startedAt = 0;
+  let openingAt = 0;
   let opened = false;
 
   function resize() {
@@ -191,11 +191,11 @@ export function createSky(canvas) {
   function buildStars() {
     stars = [];
     const scale = (width * height) / (1440 * 820);
-    scatterStars(Math.round(16 * scale), -1.1, 1.3, false);
-    scatterStars(Math.round(70 * scale), 1.4, 3.1, false);
-    scatterStars(Math.round(520 * scale), 3.2, 5.1, false);
-    scatterStars(Math.round(1900 * scale), 5.1, 7.35, false);
-    scatterStars(Math.round(2400 * scale), 5.5, 7.45, true);
+    scatterStars(Math.round(10 * scale), -1.1, 1.2, false);
+    scatterStars(Math.round(28 * scale), 1.4, 3.0, false);
+    scatterStars(Math.round(110 * scale), 3.1, 4.8, false);
+    scatterStars(Math.round(340 * scale), 4.9, 6.7, false);
+    scatterStars(Math.round(260 * scale), 5.6, 7.3, true);
   }
 
   function buildNoise() {
@@ -216,16 +216,28 @@ export function createSky(canvas) {
     noiseLayer = layer;
   }
 
-  function hash(n) {
-    const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
-    return x - Math.floor(x);
+  function seeded(index) {
+    const value = Math.sin(index * 91.171 + 17.371) * 43758.5453;
+    return value - Math.floor(value);
   }
 
-  function temporalNoise(t, seed) {
-    const i = Math.floor(t);
-    const f = t - i;
-    const u = f * f * (3 - 2 * f);
-    return hash(i + seed) * (1 - u) + hash(i + 1 + seed) * u;
+  function temporalNoise(time, seed) {
+    const integer = Math.floor(time);
+    const fraction = time - integer;
+    const eased = fraction * fraction * (3 - 2 * fraction);
+    const first = seeded(integer * 1.917 + seed * 13.71);
+    const second = seeded((integer + 1) * 1.917 + seed * 13.71);
+    return (first + (second - first) * eased) * 2 - 1;
+  }
+
+  function clamp(value, minimum, maximum) {
+    return Math.min(maximum, Math.max(minimum, value));
+  }
+
+  function smoothstep(edge0, edge1, value) {
+    const range = edge1 - edge0;
+    const t = clamp(range === 0 ? Number(value >= edge1) : (value - edge0) / range, 0, 1);
+    return t * t * (3 - 2 * t);
   }
 
   function drawStars(now) {
@@ -319,197 +331,374 @@ export function createSky(canvas) {
     ctx.restore();
   }
 
-  function pickAngle() {
-    const spread = (118 * Math.PI) / 180;
-    let angle = (11 * Math.PI) / 180 + (Math.random() - 0.5) * spread;
-    if (Math.random() < Math.min(0.42, 118 / 360)) angle += Math.PI;
-    return angle;
-  }
-
-  function pointAt(meteor, t) {
-    const bend = Math.sin(Math.min(1, Math.max(0, t)) * Math.PI) * meteor.curve * meteor.length;
-    const along = meteor.length * t;
-    return [
-      meteor.x + Math.cos(meteor.angle) * along + Math.cos(meteor.angle + Math.PI / 2) * bend,
-      meteor.y + Math.sin(meteor.angle) * along + Math.sin(meteor.angle + Math.PI / 2) * bend,
-    ];
-  }
-
-  function createMeteor(fireball, featured = false) {
-    if (featured) {
-      return {
-        fireball: true,
-        x: width * 0.12,
-        y: height * 0.16,
-        angle: (14 * Math.PI) / 180,
-        length: width * 0.48,
-        duration: 0.85,
-        curve: 0.035,
-        age: 0,
-        flare: true,
-        flared: false,
-        afterglow: 0.6,
-      };
-    }
-    const energy = Math.random() ** 1.7;
-    const angle = pickAngle();
-    let meteor = null;
-    for (let attempt = 0; attempt < 8; attempt += 1) {
-      const length = fireball ? 260 + Math.random() * 380 : 42 + energy * 130;
-      const speed = fireball ? 620 + Math.random() * 380 : 780 + Math.random() * 640;
-      const duration = fireball
-        ? Math.min(1.15, Math.max(0.48, length / speed))
-        : Math.min(0.36, Math.max(0.085, length / speed));
-      const x = fireball
-        ? -width * 0.08 + Math.random() * width * 1.16
-        : width * (0.06 + Math.random() * 0.88);
-      const y = fireball
-        ? height * (0.02 + Math.random() * 0.55)
-        : height * (0.04 + Math.random() * 0.62);
-      meteor = {
-        fireball,
-        x,
-        y,
-        angle,
-        length,
-        duration,
-        curve: (Math.random() - 0.5) * (fireball ? 0.16 : 0.05),
-        age: 0,
-        flare: fireball && Math.random() < 0.68,
-        flared: false,
-        afterglow: fireball ? 0.55 : 0.05,
-      };
-      const [mx, my] = pointAt(meteor, 0.45);
-      if (my < ridgeAt(mx) - 16 && my > height * 0.02) break;
-    }
-    return meteor;
-  }
-
-  function strokeSegment(meteor, from, to, color, width0, width1) {
-    const steps = meteor.fireball ? 10 : 5;
-    ctx.lineCap = 'butt';
-    for (let i = 0; i < steps; i += 1) {
-      const t0 = from + ((to - from) * i) / steps;
-      const t1 = from + ((to - from) * (i + 1)) / steps;
-      const [x0, y0] = pointAt(meteor, t0);
-      const [x1, y1] = pointAt(meteor, t1);
-      const k = (i + 1) / steps;
-      ctx.strokeStyle = color(k);
-      ctx.lineWidth = width0 + (width1 - width0) * k;
-      ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.lineTo(x1, y1);
-      ctx.stroke();
-    }
-  }
-
-  function drawOrdinary(meteor, progress, alpha) {
-    const head = Math.min(1, progress);
-    const tail = Math.max(0, head - 0.42);
-    strokeSegment(
-      meteor,
-      tail,
-      head,
-      (k) => `rgba(176, 208, 255, ${alpha * (0.08 + k * 0.86)})`,
-      0.35,
-      2.1,
-    );
-    const [hx, hy] = pointAt(meteor, head);
-    ctx.fillStyle = `rgba(244, 249, 255, ${alpha})`;
+  function drawPointedCapsule(tail, head, halfWidth, fill) {
+    const deltaX = head.x - tail.x;
+    const deltaY = head.y - tail.y;
+    const length = Math.hypot(deltaX, deltaY) || 1;
+    const directionX = deltaX / length;
+    const directionY = deltaY / length;
+    const normalX = -deltaY / length;
+    const normalY = deltaX / length;
+    const shoulderX = head.x - directionX * halfWidth * 0.58;
+    const shoulderY = head.y - directionY * halfWidth * 0.58;
+    const tipX = head.x + directionX * halfWidth * 0.22;
+    const tipY = head.y + directionY * halfWidth * 0.22;
+    const middleX = tail.x + deltaX * 0.5;
+    const middleY = tail.y + deltaY * 0.5;
     ctx.beginPath();
-    ctx.ellipse(hx, hy, 2.4, 1.05, meteor.angle, 0, Math.PI * 2);
+    ctx.moveTo(tail.x, tail.y);
+    ctx.quadraticCurveTo(
+      middleX + normalX * halfWidth * 0.76,
+      middleY + normalY * halfWidth * 0.76,
+      shoulderX + normalX * halfWidth,
+      shoulderY + normalY * halfWidth,
+    );
+    ctx.quadraticCurveTo(
+      tipX + normalX * halfWidth * 0.62,
+      tipY + normalY * halfWidth * 0.62,
+      tipX,
+      tipY,
+    );
+    ctx.quadraticCurveTo(
+      tipX - normalX * halfWidth * 0.62,
+      tipY - normalY * halfWidth * 0.62,
+      shoulderX - normalX * halfWidth,
+      shoulderY - normalY * halfWidth,
+    );
+    ctx.quadraticCurveTo(
+      middleX - normalX * halfWidth * 0.76,
+      middleY - normalY * halfWidth * 0.76,
+      tail.x,
+      tail.y,
+    );
+    ctx.closePath();
+    ctx.fillStyle = fill;
     ctx.fill();
   }
 
-  function drawFireball(meteor, progress) {
-    const flight = Math.min(1, progress);
-    const fadeIn = Math.min(1, meteor.age / 0.12);
-    const after = progress > 1 ? 1 - (meteor.age - meteor.duration) / meteor.afterglow : 1;
-    const alpha = Math.max(0, fadeIn * after);
-    if (alpha <= 0) return;
-    const head = flight;
-    const tail = progress > 1 ? 0.08 : Math.max(0, head - 0.7);
-    strokeSegment(
-      meteor,
-      tail,
-      Math.max(tail, head - 0.16),
-      (k) => `rgba(64, 176, 112, ${alpha * (0.05 + k * 0.55)})`,
-      1.1,
-      2.6,
-    );
-    strokeSegment(
-      meteor,
-      Math.max(tail, head - 0.18),
-      head,
-      (k) => `rgba(255, 252, 244, ${alpha * (0.25 + k * 0.75)})`,
-      1.4,
-      3.4,
-    );
-    const [hx, hy] = pointAt(meteor, head);
+  function drawCapsuleHead(head, directionX, directionY, length, halfWidth, fill) {
+    const capsuleLength = Math.max(length, halfWidth * 2);
+    const rearCenter = -capsuleLength + halfWidth;
+    const frontCenter = -halfWidth;
+    ctx.save();
+    ctx.translate(head.x, head.y);
+    ctx.rotate(Math.atan2(directionY, directionX));
+    ctx.beginPath();
+    ctx.moveTo(rearCenter, -halfWidth);
+    ctx.lineTo(frontCenter, -halfWidth);
+    ctx.arc(frontCenter, 0, halfWidth, -Math.PI / 2, Math.PI / 2);
+    ctx.lineTo(rearCenter, halfWidth);
+    ctx.arc(rearCenter, 0, halfWidth, Math.PI / 2, (Math.PI * 3) / 2);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawDirectionalWake(head, directionX, directionY, halfWidth, flare, age, seed) {
+    const wakeStrength = clamp((flare - 0.18) / 1.8, 0, 1);
+    if (wakeStrength <= 0) return;
+    const normalX = -directionY;
+    const normalY = directionX;
     ctx.save();
     ctx.globalCompositeOperation = 'screen';
-    for (let i = 1; i <= 4; i += 1) {
-      const [wx, wy] = pointAt(meteor, Math.max(0, head - i * 0.035));
-      ctx.fillStyle = i % 2 === 0
-        ? `rgba(186, 230, 206, ${alpha * 0.16})`
-        : `rgba(232, 240, 255, ${alpha * 0.14})`;
+    for (let index = 0; index < 4; index += 1) {
+      const sideNoise = temporalNoise(age * 2.2 + index * 2.7, seed + 1200 + index * 17);
+      const along = 2.5 + index * 3.2 + Math.abs(sideNoise) * 2.2;
+      const side = sideNoise * halfWidth * (0.8 + index * 0.42);
+      const centerX = head.x - directionX * along + normalX * side;
+      const centerY = head.y - directionY * along + normalY * side;
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.rotate(Math.atan2(directionY, directionX));
+      ctx.globalAlpha = wakeStrength * (0.078 - index * 0.009) * (0.72 + Math.abs(sideNoise) * 0.28);
+      ctx.fillStyle = index < 2 ? 'rgba(224, 220, 204, 0.82)' : 'rgba(106, 173, 111, 0.58)';
       ctx.beginPath();
-      ctx.ellipse(wx, wy, 10 + i * 4, 3.2, meteor.angle, 0, Math.PI * 2);
+      ctx.ellipse(0, 0, 4.2 + index * 2.25 + wakeStrength * (2.8 + index * 0.7), halfWidth * (0.75 + index * 0.26) + 0.7, 0, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
+    }
+    ctx.lineCap = 'round';
+    for (let index = 0; index < 5; index += 1) {
+      const sparkNoise = temporalNoise(age * 3.8 + index * 1.7, seed + 1400 + index * 29);
+      const along = 1.8 + index * 2.15 + Math.abs(sparkNoise) * 2.4;
+      const side = sparkNoise * halfWidth * (1.15 + index * 0.34);
+      const sparkX = head.x - directionX * along + normalX * side;
+      const sparkY = head.y - directionY * along + normalY * side;
+      const sparkLength = 0.8 + index * 0.36 + Math.abs(sparkNoise) * 1.1;
+      ctx.globalAlpha = wakeStrength * (0.115 - index * 0.013);
+      ctx.strokeStyle = index < 3 ? 'rgba(244, 239, 224, 0.76)' : 'rgba(157, 194, 154, 0.55)';
+      ctx.lineWidth = 0.28 + (index % 2) * 0.13;
+      ctx.beginPath();
+      ctx.moveTo(sparkX - directionX * sparkLength, sparkY - directionY * sparkLength);
+      ctx.lineTo(sparkX, sparkY);
+      ctx.stroke();
     }
     ctx.restore();
-    const glow = ctx.createRadialGradient(hx, hy, 0, hx, hy, 16);
-    glow.addColorStop(0, `rgba(255, 255, 250, ${alpha * 0.9})`);
-    glow.addColorStop(1, 'rgba(255, 255, 250, 0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(hx, hy, 16, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-    ctx.beginPath();
-    ctx.ellipse(hx, hy, 4.2, 1.7, meteor.angle, 0, Math.PI * 2);
-    ctx.fill();
-
-    if (meteor.flare && flight > 0.52 && flight < 0.72) {
-      const flareAge = (flight - 0.52) / 0.2;
-      const radius = 18 + flareAge * 54;
-      const flare = ctx.createRadialGradient(hx, hy, 0, hx, hy, radius);
-      flare.addColorStop(0, `rgba(255, 255, 245, ${alpha * (1 - flareAge) * 0.85})`);
-      flare.addColorStop(0.35, `rgba(190, 230, 210, ${alpha * (1 - flareAge) * 0.28})`);
-      flare.addColorStop(1, 'rgba(255, 255, 255, 0)');
-      ctx.fillStyle = flare;
-      ctx.beginPath();
-      ctx.arc(hx, hy, radius, 0, Math.PI * 2);
-      ctx.fill();
-    }
   }
 
-  function drawMeteors(dt) {
+  function drawMeteor(meteor, now) {
+    const points = meteor.points;
+    if (points.length < 2) return;
+    const newest = points[points.length - 1];
+    const age = now - meteor.born;
+    const attack = smoothstep(0, meteor.attackTime, age);
+    const terminalFade = 1 - smoothstep(meteor.duration * 0.78, meteor.duration, age);
+    const firstFlare = Math.exp(-(((age - meteor.flareAt) / meteor.flareWidth) ** 2));
+    const secondFlare = Math.exp(-(((age - meteor.secondFlareAt) / Math.max(0.045, meteor.flareWidth * 0.7)) ** 2));
+    const luminosityNoise = temporalNoise(age * (meteor.kind === 'fireball' ? 34 : 23), meteor.seed + 412);
+    const flare = meteor.kind === 'fireball'
+      ? firstFlare * meteor.flareStrength + secondFlare * meteor.flareStrength * 0.72
+      : 0;
+    const liveIntensity = meteor.alive
+      ? attack * terminalFade * (meteor.kind === 'fireball'
+        ? 0.68 + flare + Math.max(-0.08, luminosityNoise * 0.11)
+        : 0.38 + meteor.strength * 1.25 + luminosityNoise * 0.07)
+      : 0;
+
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    for (let i = meteors.length - 1; i >= 0; i -= 1) {
-      const meteor = meteors[i];
-      meteor.age += dt;
-      const life = meteor.duration + meteor.afterglow;
-      if (meteor.age >= life) {
-        meteors.splice(i, 1);
-        continue;
+    if (meteor.kind === 'fireball') {
+      ctx.lineCap = 'butt';
+      const velocityLength = Math.hypot(meteor.vx, meteor.vy) || 1;
+      const normalX = -meteor.vy / velocityLength;
+      const normalY = meteor.vx / velocityLength;
+      const displaced = (point) => {
+        const pointAge = Math.max(0, now - point.born);
+        const maturity = smoothstep(0.55, Math.max(0.72, meteor.trailLife), pointAge);
+        const drift = 0.5 * maturity * temporalNoise(point.born * 3.4 + pointAge * 0.64, meteor.seed + 817);
+        return { x: point.x + normalX * drift, y: point.y + normalY * drift, born: point.born, energy: point.energy };
+      };
+      for (let index = 1; index < points.length; index += 1) {
+        const second = points[index];
+        const firstDrawn = displaced(points[index - 1]);
+        const secondDrawn = displaced(second);
+        const decay = Math.exp(-(now - second.born) / Math.max(0.035, meteor.trailLife * 0.42));
+        const irregularity = 0.52 + 0.48 * temporalNoise(second.born * 9.5, meteor.seed + 233);
+        const alpha = clamp(decay * second.energy * (0.14 + irregularity * 0.34), 0, 0.62);
+        if (alpha < 0.012) continue;
+        ctx.globalAlpha = alpha * 0.075;
+        ctx.strokeStyle = 'rgba(72, 238, 78, 0.72)';
+        ctx.lineWidth = 0.9 + second.energy * 0.72;
+        ctx.beginPath();
+        ctx.moveTo(firstDrawn.x, firstDrawn.y);
+        ctx.lineTo(secondDrawn.x, secondDrawn.y);
+        ctx.stroke();
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = second.energy > 1.2 ? 'rgba(199, 255, 128, 0.86)' : 'rgba(76, 239, 77, 0.78)';
+        ctx.lineWidth = 0.26 + Math.min(0.72, second.energy * 0.27);
+        ctx.beginPath();
+        ctx.moveTo(firstDrawn.x, firstDrawn.y);
+        ctx.lineTo(secondDrawn.x, secondDrawn.y);
+        ctx.stroke();
       }
-      const progress = meteor.age / meteor.duration;
-      if (meteor.fireball) drawFireball(meteor, progress);
-      else drawOrdinary(meteor, progress, progress > 1 ? 1 - (meteor.age - meteor.duration) / meteor.afterglow : 1);
+    }
+
+    if (liveIntensity > 0.015) {
+      const bodyCutoff = now - meteor.bodyTime;
+      let bodyStart = 0;
+      while (bodyStart < points.length - 2 && points[bodyStart].born < bodyCutoff) bodyStart += 1;
+      const tail = points[bodyStart];
+      const baseWidth = meteor.kind === 'fireball'
+        ? (0.42 + meteor.strength * 0.58) * (0.12 + attack * 0.88) * (1 + Math.min(1.4, flare) * 0.2)
+        : 0.34 + meteor.strength * 0.42;
+      if (meteor.kind === 'fireball') {
+        const velocityLength = Math.hypot(meteor.vx, meteor.vy) || 1;
+        const directionX = meteor.vx / velocityLength;
+        const directionY = meteor.vy / velocityLength;
+        const trailHalfWidth = baseWidth * 0.72;
+        const bodyGradient = ctx.createLinearGradient(tail.x, tail.y, newest.x, newest.y);
+        bodyGradient.addColorStop(0, 'rgba(34, 204, 47, 0)');
+        bodyGradient.addColorStop(0.3, 'rgba(51, 232, 59, 0.24)');
+        bodyGradient.addColorStop(0.68, 'rgba(78, 255, 75, 0.86)');
+        bodyGradient.addColorStop(0.86, 'rgba(188, 255, 153, 0.34)');
+        bodyGradient.addColorStop(1, 'rgba(239, 246, 229, 0.06)');
+        ctx.globalAlpha = clamp(liveIntensity, 0, 1) * 0.075;
+        drawPointedCapsule(tail, newest, trailHalfWidth * 1.9, bodyGradient);
+        ctx.globalAlpha = clamp(liveIntensity * 0.9, 0, 1);
+        drawPointedCapsule(tail, newest, trailHalfWidth, bodyGradient);
+        const hotCutoff = now - (0.038 + Math.min(0.046, Math.max(0, flare) * 0.012));
+        let hotStart = points.length - 2;
+        while (hotStart > 0 && points[hotStart].born > hotCutoff) hotStart -= 1;
+        const hotTail = points[hotStart];
+        const hotGradient = ctx.createLinearGradient(hotTail.x, hotTail.y, newest.x, newest.y);
+        hotGradient.addColorStop(0, 'rgba(142, 255, 115, 0)');
+        hotGradient.addColorStop(0.36, 'rgba(199, 245, 183, 0.32)');
+        hotGradient.addColorStop(0.72, 'rgba(242, 239, 222, 0.82)');
+        hotGradient.addColorStop(1, 'rgba(255, 255, 250, 0.94)');
+        ctx.globalAlpha = clamp(liveIntensity * 0.82, 0, 1);
+        drawPointedCapsule(hotTail, newest, 0.3 + baseWidth * 0.22, hotGradient);
+        const headLength = clamp(10 + velocityLength / 76 + Math.min(6, Math.max(0, flare) * 1.35), 12, 28);
+        const headHalfWidth = clamp(0.58 + baseWidth * 0.62 + Math.min(0.7, Math.max(0, flare) * 0.1), 1.05, 3.5);
+        const headRearX = newest.x - directionX * headLength;
+        const headRearY = newest.y - directionY * headLength;
+        const headFrontX = newest.x + directionX * headHalfWidth;
+        const headFrontY = newest.y + directionY * headHalfWidth;
+        drawDirectionalWake(newest, directionX, directionY, headHalfWidth, flare, age, meteor.seed);
+        const headGradient = ctx.createLinearGradient(headRearX, headRearY, headFrontX, headFrontY);
+        headGradient.addColorStop(0, 'rgba(102, 246, 91, 0)');
+        headGradient.addColorStop(0.24, 'rgba(167, 255, 139, 0.55)');
+        headGradient.addColorStop(0.52, 'rgba(239, 243, 222, 0.92)');
+        headGradient.addColorStop(0.84, 'rgba(255, 254, 246, 1)');
+        headGradient.addColorStop(1, 'rgba(255, 255, 255, 0.76)');
+        ctx.globalAlpha = clamp(liveIntensity * 0.94, 0, 1);
+        drawCapsuleHead(newest, directionX, directionY, headLength, headHalfWidth, headGradient);
+      } else {
+        const gradient = ctx.createLinearGradient(tail.x, tail.y, newest.x, newest.y);
+        gradient.addColorStop(0, 'rgba(193, 219, 255, 0)');
+        gradient.addColorStop(0.7, 'rgba(225, 238, 255, 0.74)');
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 1)');
+        ctx.globalAlpha = clamp(liveIntensity, 0, 1.2) * 0.13;
+        drawPointedCapsule(tail, newest, baseWidth * 2, gradient);
+        ctx.globalAlpha = clamp(liveIntensity, 0, 1);
+        drawPointedCapsule(tail, newest, baseWidth, gradient);
+        const bloomRadius = 0.72 + meteor.strength * 1.2;
+        const bloom = ctx.createRadialGradient(newest.x, newest.y, 0, newest.x, newest.y, bloomRadius);
+        bloom.addColorStop(0, 'rgba(255, 255, 255, 0.96)');
+        bloom.addColorStop(0.2, 'rgba(211, 229, 255, 0.3)');
+        bloom.addColorStop(1, 'rgba(160, 205, 255, 0)');
+        ctx.globalAlpha = clamp(liveIntensity * 0.72, 0, 1);
+        ctx.fillStyle = bloom;
+        ctx.beginPath();
+        ctx.arc(newest.x, newest.y, bloomRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     ctx.restore();
   }
 
-  function poissonDelay() {
-    const perSecond = METEOR_RATE / 60;
-    return (-Math.log(1 - Math.random()) / perSecond) * 1000;
+  function createMeteor(kind, now, options = {}) {
+    const variant = options.variant ?? null;
+    let angleDegrees = options.angleDegrees ?? (11 + (Math.random() - 0.5) * 118);
+    if (options.angleDegrees === undefined && Math.random() < Math.min(0.42, 118 / 360)) angleDegrees += 180;
+    const angle = (angleDegrees * Math.PI) / 180;
+    const directionX = Math.cos(angle);
+    const directionY = Math.sin(angle);
+    const ordinaryEnergy = kind === 'ordinary' ? Math.random() ** 1.7 : 0;
+    const fireballBase = 0.56 + 0.72 * 0.86 + Math.random() * 0.38;
+    const hasBurst = kind === 'fireball' && (variant !== null || Math.random() < 0.68);
+    const isExtreme = hasBurst && Math.random() < (variant === 'strong' ? 0.42 : 0.06 + 0.72 * 0.16);
+    const strength = kind === 'fireball'
+      ? fireballBase * (variant === 'strong' ? 1.34 : variant === 'weak' ? 0.62 : 1) * (isExtreme ? 1.34 : 1)
+      : 0.14 + ordinaryEnergy * 0.38;
+    const speed = Math.max(width, 900) * (kind === 'fireball'
+      ? (variant === 'strong' ? 0.25 + Math.random() * 0.09 : 0.36 + Math.random() * 0.18)
+      : 0.42 + Math.random() * 0.38 + ordinaryEnergy * 0.12);
+    const ordinaryTrackLength = Math.min(width, height) * (0.065 + ordinaryEnergy * 0.18 + Math.random() * (0.022 + ordinaryEnergy * 0.035));
+    let x;
+    let y;
+    if (options.originX !== undefined) {
+      x = width * options.originX;
+      y = height * options.originY;
+    } else if (kind === 'ordinary') {
+      const travelX = directionX * ordinaryTrackLength;
+      const travelY = directionY * ordinaryTrackLength;
+      const minimumX = width * 0.055 - Math.min(0, travelX);
+      const maximumX = width * 0.945 - Math.max(0, travelX);
+      x = minimumX + Math.random() * Math.max(1, maximumX - minimumX);
+      const limit = ridgeAt(x) - 30;
+      const minimumY = height * 0.04 - Math.min(0, travelY);
+      const maximumY = Math.min(limit, height * 0.72 - Math.max(0, travelY));
+      y = minimumY + Math.random() * Math.max(1, maximumY - minimumY);
+    } else if (Math.abs(directionX) >= Math.abs(directionY)) {
+      x = directionX >= 0 ? -width * 0.08 : width * 1.08;
+      y = height * (0.05 + Math.random() * 0.5);
+    } else {
+      x = width * (0.08 + Math.random() * 0.84);
+      y = directionY >= 0 ? -height * 0.08 : ridgeAt(x) * 0.9;
+    }
+    const duration = kind === 'fireball'
+      ? (variant === 'strong' ? 0.98 + Math.random() * 0.18 : 0.76 + Math.random() * 0.24)
+      : clamp(ordinaryTrackLength / Math.max(1, speed), 0.085, 0.36);
+    const flareAt = hasBurst ? duration * clamp(0.52 + (Math.random() - 0.5) * 0.12, 0.16, 0.84) : -10;
+    const flareWidth = variant === 'strong' ? 0.14 + Math.random() * 0.055 : 0.09 + Math.random() * 0.04;
+    const trailLife = kind === 'fireball'
+      ? 0.55 * (variant === 'strong' ? 2.85 + Math.random() * 0.35 : 1.18 + Math.random() * 0.28)
+      : 0.045 + ordinaryEnergy * 0.045 + 0.55 * 0.08;
+    const ordinaryTailLength = Math.min(width, height) * (0.012 + ordinaryEnergy * 0.045 + Math.random() * (0.006 + ordinaryEnergy * 0.012));
+    const bodyTime = kind === 'fireball'
+      ? (variant === 'strong' ? 0.62 + Math.random() * 0.15 : 0.36 + Math.random() * 0.16)
+      : Math.min(duration * 0.64, ordinaryTailLength / Math.max(1, speed));
+    return {
+      kind,
+      strength,
+      x,
+      y,
+      vx: directionX * speed,
+      vy: directionY * speed,
+      curve: (Math.random() - 0.5) * (kind === 'fireball' ? 0.35 : 0.12),
+      born: now,
+      duration,
+      trailLife,
+      bodyTime,
+      attackTime: kind === 'fireball' ? 0.12 * (variant === 'strong' ? 2.4 : 1.3) : 0.012 + ordinaryEnergy * 0.008,
+      alive: true,
+      lastSample: now,
+      flareAt,
+      secondFlareAt: isExtreme ? Math.min(duration * 0.9, flareAt + duration * 0.22) : -10,
+      flareWidth,
+      flareStrength: kind === 'fireball' ? (variant === 'strong' ? 1.05 : 0.72) + strength * 0.62 : 0,
+      seed: Math.random() * 1000,
+      points: [{ x, y, born: now, energy: 0.22 }],
+    };
   }
 
-  function frame(now) {
+  function updateMeteors(dt, now) {
+    if (!opened && now >= openingAt) {
+      meteors.push(createMeteor('fireball', now, {
+        angleDegrees: 25 + Math.random() * 14,
+        originX: 0.3 + Math.random() * 0.12,
+        originY: 0.2 + Math.random() * 0.12,
+        variant: Math.random() < 0.28 ? 'strong' : null,
+      }));
+      opened = true;
+      nextMeteor = Math.max(nextMeteor, now + 1.4);
+    }
+    if (now >= nextMeteor) {
+      meteors.push(createMeteor(!REDUCED_MOTION && Math.random() < 0.26 ? 'fireball' : 'ordinary', now));
+      const mean = REDUCED_MOTION ? 9 : 60 / METEOR_RATE;
+      nextMeteor = now + Math.max(0.12, -Math.log(Math.max(0.001, Math.random())) * mean);
+    }
+    for (let index = meteors.length - 1; index >= 0; index -= 1) {
+      const meteor = meteors[index];
+      if (meteor.alive) {
+        const age = now - meteor.born;
+        const turn = meteor.curve * dt;
+        const cosine = Math.cos(turn);
+        const sine = Math.sin(turn);
+        const vx = meteor.vx * cosine - meteor.vy * sine;
+        const vy = meteor.vx * sine + meteor.vy * cosine;
+        meteor.vx = vx;
+        meteor.vy = vy;
+        meteor.x += vx * dt;
+        meteor.y += vy * dt;
+        if (now - meteor.lastSample > 0.0075) {
+          const firstFlare = Math.exp(-(((age - meteor.flareAt) / meteor.flareWidth) ** 2));
+          const secondFlare = Math.exp(-(((age - meteor.secondFlareAt) / Math.max(0.045, meteor.flareWidth * 0.7)) ** 2));
+          const grain = 0.18 + 0.2 * (0.5 + 0.5 * temporalNoise(age * 8.5, meteor.seed + 491));
+          meteor.points.push({
+            x: meteor.x,
+            y: meteor.y,
+            born: now,
+            energy: grain + firstFlare * meteor.flareStrength + secondFlare * meteor.flareStrength * 0.72,
+          });
+          meteor.lastSample = now;
+        }
+        if (age > meteor.duration) meteor.alive = false;
+      }
+      while (meteor.points.length > 2 && now - meteor.points[0].born > meteor.trailLife) meteor.points.shift();
+      if (!meteor.alive && meteor.points.length <= 2) {
+        meteors.splice(index, 1);
+        continue;
+      }
+      drawMeteor(meteor, now);
+    }
+  }
+
+  function frame(nowMs) {
     if (!running) return;
-    const dt = Math.min(0.05, last ? (now - last) / 1000 : 0.016);
+    const now = nowMs / 1000;
+    const dt = Math.min(0.05, last ? now - last : 0.016);
     last = now;
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -521,18 +710,10 @@ export function createSky(canvas) {
     ctx.globalAlpha = 0.74;
     ctx.drawImage(milkyLayer, 0, 0, width, height);
     ctx.restore();
-    drawStars(now);
-    if (!opened && now - startedAt > 650) {
-      meteors.push(createMeteor(true, true));
-      opened = true;
-    }
-    if (now >= nextMeteor) {
-      meteors.push(createMeteor(!REDUCED_MOTION && Math.random() < 0.26));
-      if (!REDUCED_MOTION && Math.random() < 0.4) meteors.push(createMeteor(false));
-      nextMeteor = now + (REDUCED_MOTION ? 9000 : poissonDelay());
-    }
-    drawMeteors(dt);
+    drawStars(nowMs);
+    updateMeteors(dt, now);
     ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
     drawHorizon();
     drawSensorNoise();
     raf = requestAnimationFrame(frame);
@@ -544,10 +725,10 @@ export function createSky(canvas) {
     running = true;
     last = 0;
     opened = false;
-    startedAt = performance.now();
     meteors = [];
-    const now = performance.now();
-    nextMeteor = now + 500;
+    const now = performance.now() / 1000;
+    openingAt = now + 0.38 + Math.random() * 0.34;
+    nextMeteor = now + 2.2;
     raf = requestAnimationFrame(frame);
   }
 

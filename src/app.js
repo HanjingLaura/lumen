@@ -1,7 +1,6 @@
 import { LumenBluetooth } from './bluetooth.js';
 import { loadButtonMap, saveButtonMap, sceneIdForButton } from './buttonMap.js';
 import { SCENES, SCENES_BY_ID } from './scenes.js';
-import { setRainActive } from './rain.js';
 import { setSkyActive } from './sky.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -19,16 +18,7 @@ function activateScene(sceneId, source = 'Mock', buttonId = null) {
   state.buttonId = buttonId;
   $('#sceneMark').textContent = String(scene.id);
   $('#scene').dataset.scene = String(scene.id);
-  if (scene.id === 1) {
-    setSkyActive(false);
-    setRainActive(true);
-  } else if (scene.id === 2) {
-    setRainActive(false);
-    setSkyActive(true);
-  } else {
-    setRainActive(false);
-    setSkyActive(false);
-  }
+  setSkyActive(scene.id === 2);
   document.querySelectorAll('.key').forEach((key) => key.classList.toggle('active', Number(key.dataset.button) === buttonId));
 }
 

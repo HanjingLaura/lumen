@@ -7,6 +7,6 @@
   "scripts": {
     "dev": "node server.mjs",
     "start": "node server.mjs",
-    "check": "node --check server.mjs && node --check src/app.js && node --check src/bluetooth.js && node --check src/buttonMap.js && node --check src/scenes.js && node --check src/sky.js && node --check src/rain.js"
+    "check": "node --check server.mjs && node --check src/app.js && node --check src/bluetooth.js && node --check src/buttonMap.js && node --check src/scenes.js && node --check src/sky.js"
   }
 }
