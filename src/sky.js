@@ -3,6 +3,7 @@
  * 画法对齐 AstroShot 仓库（暗色天空、星等闪烁、尖头流星光带、山脊压住轨迹），
  * 镜头锁在地平线附近，银河用程序生成在右侧，不使用全景照片。
  */
+import { createNightLoop, hushNightLoop, playNightLoop } from './sky/night-audio.js';
 
 const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -746,6 +747,8 @@ export function createSky(canvas) {
 }
 
 let activeSky = null;
+let nightAudio = null;
+let nightUnlocked = false;
 
 export function setSkyActive(active) {
   const canvas = document.getElementById('sky');
@@ -754,8 +757,18 @@ export function setSkyActive(active) {
     canvas.hidden = false;
     if (!activeSky) activeSky = createSky(canvas);
     activeSky.start();
+    if (nightUnlocked) playNightLoop(nightAudio);
     return;
   }
   if (activeSky) activeSky.stop();
   canvas.hidden = true;
+  hushNightLoop(nightAudio);
+}
+
+export async function unlockSky() {
+  if (nightUnlocked) return;
+  nightUnlocked = true;
+  if (!nightAudio) nightAudio = createNightLoop();
+  const canvas = document.getElementById('sky');
+  if (canvas && !canvas.hidden) await playNightLoop(nightAudio);
 }
