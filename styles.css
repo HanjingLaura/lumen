@@ -12,6 +12,7 @@ button { font: inherit; cursor: pointer; }
   height: 100%;
   pointer-events: none;
 }
+.scene[data-scene="1"] { background: #070910; }
 .scene[data-scene="2"] { background: #02030a; }
 .scene-mark {
   position: fixed;
@@ -23,6 +24,7 @@ button { font: inherit; cursor: pointer; }
   line-height: 1;
   letter-spacing: 0;
 }
+.scene[data-scene="1"] .scene-mark,
 .scene[data-scene="2"] .scene-mark { color: rgba(236, 240, 248, 0.78); }
 .bench-entry {
   position: fixed;
@@ -38,11 +40,13 @@ button { font: inherit; cursor: pointer; }
   line-height: 1.2;
 }
 .bench-entry:hover { border-color: #111; color: #111; }
+.scene[data-scene="1"] .bench-entry,
 .scene[data-scene="2"] .bench-entry {
   border-color: rgba(255, 255, 255, 0.22);
   background: rgba(6, 8, 14, 0.42);
   color: rgba(236, 240, 248, 0.86);
 }
+.scene[data-scene="1"] .bench-entry:hover,
 .scene[data-scene="2"] .bench-entry:hover {
   border-color: rgba(255, 255, 255, 0.7);
   color: #fff;

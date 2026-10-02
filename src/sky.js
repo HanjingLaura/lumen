@@ -1,5 +1,5 @@
 /**
- * 场景 2：暗夜空。静态星野画在离屏画布上，亮星闪烁和流星每帧叠加。
+ * 场景 2：暗夜空。星野和银河按一次缓慢的呼吸一起亮起、暗下，流星叠在上面。
  * 流星按一场小流星雨来排：大多数从同一辐射点方向掠过，少数是散现。
  */
 
@@ -13,6 +13,7 @@ export function createSky(canvas) {
   let height = 0;
   let dpr = 1;
   let backdrop = null;
+  let glowLayer = null;
   let brightStars = [];
   let meteors = [];
   let sparks = [];
@@ -56,8 +57,26 @@ export function createSky(canvas) {
     drawMilkyWay(g);
     paintStars(g);
     drawVignette(g);
-
     backdrop = layer;
+
+    const glow = document.createElement('canvas');
+    glow.width = layer.width;
+    glow.height = layer.height;
+    const glowCtx = glow.getContext('2d');
+    glowCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawMilkyGlow(glowCtx, 1.05);
+    glowLayer = glow;
+  }
+
+  function breathAmount(seconds) {
+    const period = 6.4;
+    const p = (seconds % period) / period;
+    const inhale = 0.4;
+    const hold = 0.1;
+    const smooth = (t) => t * t * (3 - 2 * t);
+    if (p < inhale) return smooth(p / inhale);
+    if (p < inhale + hold) return 1;
+    return 1 - smooth((p - inhale - hold) / (1 - inhale - hold));
   }
 
   function bandCoords(x, y) {
@@ -88,7 +107,7 @@ export function createSky(canvas) {
     };
   }
 
-  function drawMilkyWay(g) {
+  function drawMilkyGlow(g, strength) {
     g.save();
     g.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 110; i += 1) {
@@ -96,7 +115,7 @@ export function createSky(canvas) {
       const point = milkyPoint(t, 0.15);
       const presence = Math.sin(t * Math.PI);
       const radius = height * (0.035 + presence * 0.07);
-      const alpha = 0.018 + presence * 0.04;
+      const alpha = (0.02 + presence * 0.045) * strength;
       const gradient = g.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius);
       const color = t > 0.42 && t < 0.66 ? '214, 198, 176' : '150, 170, 204';
       gradient.addColorStop(0, `rgba(${color}, ${alpha})`);
@@ -107,7 +126,10 @@ export function createSky(canvas) {
       g.fill();
     }
     g.restore();
+  }
 
+  function drawMilkyWay(g) {
+    drawMilkyGlow(g, 0.85);
     const count = Math.floor((width * height) / 520);
     for (let i = 0; i < count; i += 1) {
       const point = milkyPoint(Math.random(), 1);
@@ -204,7 +226,7 @@ export function createSky(canvas) {
     let angle;
     if (roll < 0.68) angle = 0.22 + Math.random() * 0.48;
     else if (roll < 0.88) angle = Math.PI - 0.55 + Math.random() * 0.7;
-    else angle = Math.PI / 2 + (Math.random() - 0.5) * 0.35;
+    else angle = 0.95 + Math.random() * 0.4;
 
     const speed = Math.min(width, height) * (0.9 + Math.random() * 1.15);
     const duration = 0.34 + Math.random() * 0.48;
@@ -346,17 +368,19 @@ export function createSky(canvas) {
     }
   }
 
-  function drawTwinkles(now) {
+  function drawTwinkles(now, breath) {
     if (REDUCED_MOTION) return;
     for (const star of brightStars) {
-      const flicker = 0.78 + 0.22 * Math.sin(now * 0.001 * star.speed + star.phase);
-      const alpha = star.alpha * flicker;
+      const drift = 0.9 + 0.1 * Math.sin(now * 0.0004 * star.speed + star.phase);
+      const flicker = (0.45 + 0.55 * breath) * drift;
+      const alpha = Math.min(1, star.alpha * flicker);
+      const radius = star.radius * (0.7 + 0.55 * breath);
       ctx.fillStyle = `rgba(${star.r}, ${star.g}, ${star.b}, ${alpha})`;
       ctx.beginPath();
-      ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+      ctx.arc(star.x, star.y, radius, 0, Math.PI * 2);
       ctx.fill();
       if (!star.spike) continue;
-      const length = star.radius * 6.5 * flicker;
+      const length = star.radius * (4 + 5 * breath) * drift;
       ctx.strokeStyle = `rgba(${star.r}, ${star.g}, ${star.b}, ${alpha * 0.4})`;
       ctx.lineWidth = 0.55;
       ctx.beginPath();
@@ -375,7 +399,17 @@ export function createSky(canvas) {
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.drawImage(backdrop, 0, 0, width, height);
-    drawTwinkles(now);
+    const breath = REDUCED_MOTION ? 0.75 : breathAmount(now / 1000);
+    if (!REDUCED_MOTION && glowLayer) {
+      ctx.fillStyle = `rgba(1, 2, 8, ${(1 - breath) * 0.22})`;
+      ctx.fillRect(0, 0, width, height);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = 0.28 + 0.72 * breath;
+      ctx.drawImage(glowLayer, 0, 0, width, height);
+      ctx.restore();
+    }
+    drawTwinkles(now, breath);
     updateMeteors(dt);
     drawSparks(dt);
     drawSatellites(dt);
