@@ -4,18 +4,29 @@ html, body { height: 100%; }
 body { margin: 0; background: #fff; color: #111; font-family: system-ui, sans-serif; }
 button { font: inherit; cursor: pointer; }
 
-.scene { min-height: 100%; background: #fff; }
+.scene { position: relative; min-height: 100%; background: #fff; }
+#sceneCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
+.scene[data-scene="1"] { background: #07131c; color: #f4f7fb; }
+.scene[data-scene="1"] #sceneCanvas { display: block; }
 .scene-mark {
   position: fixed;
   top: 22px;
   left: 26px;
+  z-index: 2;
   font-size: 22px;
   font-weight: 600;
   line-height: 1;
   letter-spacing: 0;
 }
+.scene[data-scene="1"] .bench-entry {
+  z-index: 2;
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(7, 19, 28, 0.35);
+  color: #f4f7fb;
+}
 .bench-entry {
   position: fixed;
+  z-index: 2;
   top: 16px;
   right: 16px;
   padding: 6px 10px;
