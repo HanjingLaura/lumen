@@ -41,12 +41,14 @@ static const float BASELINE_FLOOR = 1.0f;         // 背景下限，避免除零
 static const uint32_t BASELINE_WARMUP_MS = 500;   // 前 500 ms 背景可以吃所有峰值（冷启动）
 static const float BASELINE_ADMIT_X = 3.0f;       // 之后只有 peak < 此倍数×背景 才进 EMA，避免被拍手抬高
 static const uint32_t BASELINE_HOLD_MS = 150;     // 响亮事件（候选/确认/拒绝）后这么久不更新背景
-static const float CLAP_PEAK_OVER_BASE = 6.0f;    // 10 ms 峰值须超过背景的 K 倍（软键盘多半够不着）
+static const float CLAP_PEAK_OVER_BASE = 20.0f;   // 10 ms 峰值须超过背景的 K 倍（默认 20，挡小误触发）
 static const float CLAP_CREST_MIN = 3.0f;         // 波峰因数；削波拍手会变低，默认 3
 static const float CLIP_LEVEL_24 = 7000000.0f;    // 10 ms 峰值达到此值视为削波，不再卡 crest
 static const uint32_t DECAY_WAIT_MS = 50;         // 峰值后再看约 50 ms（响尾可跨 2–3 个 10 ms）
 static const float DECAY_FRAC = 0.50f;            // 衰减门槛：确认窗口峰值 < DECAY_FRAC * 拍手峰值
 static const uint32_t CLAP_REFRACTORY_MS = 120;   // 两次拍手之间的不应期
+static const uint32_t ECHO_WINDOW_MS = 300;       // 确认后这么久内，新候选须够响，否则当回声/尾巴
+static const float ECHO_REL_MIN = 0.50f;          // 回声窗内：新 peak >= 上一拍 peak × 此比例（真双击够得着）
 static const uint32_t DOUBLE_CLAP_MIN_MS = 150;   // 双击：两拍间隔下限
 static const uint32_t DOUBLE_CLAP_MAX_MS = 600;   // 双击：两拍间隔上限
 static const uint32_t DBG_EVERY_MS = 1000;        // 每秒一行 DBG，看背景有没有跟上
@@ -80,6 +82,7 @@ static bool baselineReady = false;
 static uint32_t baselineStartMs = 0;
 static uint32_t lastDbgMs = 0;
 static uint32_t lastClapMs = 0;
+static float lastConfirmedPeak = 0.0f;
 static uint32_t lastLoudMs = 0;
 static uint32_t lastClapForDoubleMs = 0;
 static float candPeak = 0.0f;
@@ -158,6 +161,7 @@ static void resetClapDetector(uint32_t now) {
   baselineStartMs = now;
   lastDbgMs = now;
   lastClapMs = 0;
+  lastConfirmedPeak = 0.0f;
   lastLoudMs = 0;
   lastClapForDoubleMs = 0;
   candPeak = 0.0f;
@@ -245,6 +249,7 @@ static void confirmOrRejectClap(float followPeak, uint32_t now) {
     }
   }
   lastClapMs = clapAt;
+  lastConfirmedPeak = candPeak;
   lastClapForDoubleMs = clapAt;
 }
 
@@ -275,12 +280,15 @@ static void finishSubwindow() {
   const bool warmed =
       !hpfWarm && baselineReady && ((now - baselineStartMs) >= BASELINE_WARMUP_MS);
   const bool refractory = (lastClapMs != 0) && ((now - lastClapMs) < CLAP_REFRACTORY_MS);
+  const bool inEchoWindow =
+      (lastClapMs != 0) && (lastConfirmedPeak > 0.0f) && ((now - lastClapMs) < ECHO_WINDOW_MS);
+  const bool echoTooSoft = inEchoWindow && (peak < (ECHO_REL_MIN * lastConfirmedPeak));
   const float base = (baselinePeak > BASELINE_FLOOR) ? baselinePeak : BASELINE_FLOOR;
   const float ratio = peak / base;
   const float crest = (shortRms > 1.0f) ? (peak / shortRms) : ((peak > 0.0f) ? 100.0f : 0.0f);
   const bool clipped = peak >= CLIP_LEVEL_24;
   const bool crestOk = clipped || (crest >= CLAP_CREST_MIN);
-  if (warmed && !refractory && peak > (CLAP_PEAK_OVER_BASE * base) && crestOk) {
+  if (warmed && !refractory && !echoTooSoft && peak > (CLAP_PEAK_OVER_BASE * base) && crestOk) {
     candPeak = peak;
     candBase = base;
     candRatio = ratio;
