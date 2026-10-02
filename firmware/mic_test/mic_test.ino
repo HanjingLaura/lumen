@@ -102,7 +102,7 @@ static size_t readAlignedSamples(int32_t *out, size_t maxSamples) {
 
   size_t got = 0;
   const esp_err_t err = i2s_channel_read(rx, tmp + leftoverLen, BLOCK_BYTES, &got, READ_TIMEOUT_MS);
-  if (err != ESP_OK && err != ESP_ERR_TIMEOUT) {
+  if (err != ESP_OK && err != ESP_ERR_TIMEOUT && got == 0) {
     return 0;
   }
 
