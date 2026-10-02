@@ -78,42 +78,53 @@ export function createSky(canvas) {
         + Math.sin(index * 1.73) * 3) * amp;
   }
 
+  function milkyPoint(t) {
+    const x0 = width * 0.56;
+    const y0 = height * 0.7;
+    const x1 = width * 0.98;
+    const y1 = height * 0.02;
+    return [
+      x0 + (x1 - x0) * t + Math.sin(t * 4.6) * width * 0.02,
+      y0 + (y1 - y0) * t,
+    ];
+  }
+
   function buildMilkyWay() {
+    const scale = 3;
+    const w = Math.ceil(width / scale);
+    const h = Math.ceil(height / scale);
     const layer = document.createElement('canvas');
-    layer.width = canvas.width;
-    layer.height = canvas.height;
+    layer.width = w;
+    layer.height = h;
     const g = layer.getContext('2d');
-    g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const x0 = width * 0.6;
-    const y0 = height * 0.66;
-    const x1 = width * 0.96;
-    const y1 = height * 0.03;
-    for (let i = 0; i < 26; i += 1) {
-      const t = i / 25;
-      const x = x0 + (x1 - x0) * t + Math.sin(t * 5.2) * width * 0.018;
-      const y = y0 + (y1 - y0) * t;
-      const rad = height * (0.2 - t * 0.05);
-      const dust = i % 4 === 0;
-      const glow = g.createRadialGradient(x, y, 0, x, y, rad);
-      glow.addColorStop(0, dust ? 'rgba(196, 176, 148, 0.1)' : 'rgba(214, 224, 255, 0.12)');
-      glow.addColorStop(0.42, 'rgba(120, 146, 196, 0.045)');
-      glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      g.fillStyle = glow;
-      g.beginPath();
-      g.arc(x, y, rad, 0, Math.PI * 2);
-      g.fill();
+    const image = g.createImageData(w, h);
+    const data = image.data;
+    const x0 = 0.56 * w;
+    const y0 = 0.7 * h;
+    const x1 = 0.98 * w;
+    const y1 = 0.02 * h;
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const len2 = dx * dx + dy * dy;
+    const sigma = w * 0.09;
+    for (let y = 0; y < h; y += 1) {
+      for (let x = 0; x < w; x += 1) {
+        let t = ((x - x0) * dx + (y - y0) * dy) / len2;
+        t = Math.max(0, Math.min(1, t));
+        const dist = Math.hypot(x - (x0 + dx * t), y - (y0 + dy * t));
+        const fall = Math.exp(-(dist * dist) / (2 * sigma * sigma));
+        const along = 0.45 + 0.55 * Math.sin(t * Math.PI);
+        const alpha = fall * along;
+        if (alpha < 0.04) continue;
+        const i = (y * w + x) * 4;
+        const warm = dist < sigma * 0.35 ? 18 : 0;
+        data[i] = 170 + warm;
+        data[i + 1] = 184 + warm * 0.4;
+        data[i + 2] = 214 - warm;
+        data[i + 3] = Math.round(alpha * 36);
+      }
     }
-    const count = Math.floor(width * 1.15);
-    for (let i = 0; i < count; i += 1) {
-      const along = Math.random();
-      const spread = (0.15 - along * 0.05) * (Math.random() ** 0.65) * (Math.random() < 0.5 ? -1 : 1);
-      const x = x0 + (x1 - x0) * along + spread * width;
-      const y = y0 + (y1 - y0) * along + (Math.random() - 0.5) * height * 0.13;
-      if (y > ridgeAt(x) - 8) continue;
-      const alpha = 0.08 + Math.random() ** 2 * 0.55;
-      g.fillStyle = `rgba(226, 232, 248, ${alpha})`;
-      g.fillRect(x, y, Math.random() < 0.08 ? 1.4 : 1, 1);
-    }
+    g.putImageData(image, 0, 0);
     milkyLayer = layer;
   }
 
@@ -125,27 +136,40 @@ export function createSky(canvas) {
     ];
   }
 
+  function pushStar(x, y, mag, warmth) {
+    if (y < 2 || y > ridgeAt(x) - 2) return;
+    const [r, g, b] = starColor(warmth);
+    stars.push({
+      x,
+      y,
+      mag,
+      r,
+      g,
+      b,
+      seed: Math.random() * 1000,
+      alpha: mag < 1 ? 0.95 : mag < 2.2 ? 0.72 : mag < 3.6 ? 0.46 : 0.28,
+    });
+  }
+
   function buildStars() {
-    const count = Math.floor((width * height) / 680);
     stars = [];
+    const count = Math.floor((width * height) / 380);
     for (let i = 0; i < count; i += 1) {
       const x = Math.random() * width;
-      const y = Math.random() * ridgeAt(x);
       const roll = Math.random();
-      const mag = roll < 0.78 ? 3.6 + Math.random() * 2 : roll < 0.95 ? 2 + Math.random() * 1.5 : Math.random() * 1.7;
-      const warmth = (Math.random() ** 2) * (Math.random() < 0.22 ? -1 : 0.85);
-      const [r, g, b] = starColor(warmth);
-      stars.push({
-        x,
-        y,
-        mag,
-        r,
-        g,
-        b,
-        seed: Math.random() * 1000,
-        radius: mag < 1.15 ? 1.55 : mag < 2.4 ? 1.05 : 0.65,
-        alpha: mag < 1.3 ? 0.92 : mag < 2.6 ? 0.62 : mag < 4.2 ? 0.38 : 0.2,
-      });
+      const mag = roll < 0.84 ? 3.4 + Math.random() * 2.2 : roll < 0.97 ? 1.8 + Math.random() * 1.4 : Math.random() * 1.5;
+      const warmth = (Math.random() ** 2) * (Math.random() < 0.2 ? -1 : 0.7);
+      pushStar(x, Math.random() * ridgeAt(x), mag, warmth);
+    }
+    const band = Math.floor(width * 1.6);
+    for (let i = 0; i < band; i += 1) {
+      const t = Math.random();
+      const [cx, cy] = milkyPoint(t);
+      const spread = width * (0.012 + Math.random() ** 2 * 0.11);
+      const x = cx + (Math.random() - 0.5) * spread * 2;
+      const y = cy + (Math.random() - 0.5) * spread * 1.5;
+      const mag = Math.random() < 0.08 ? 1.2 + Math.random() : 3.2 + Math.random() * 2;
+      pushStar(x, y, mag, Math.random() * 0.35);
     }
   }
 
@@ -198,25 +222,22 @@ export function createSky(canvas) {
       const level = scintillation(star, now);
       const alpha = Math.min(1, star.alpha * level);
       if (alpha < 0.04) continue;
-      const chroma = REDUCED_MOTION ? 0 : (temporalNoise(now * 0.003, star.seed + 9) - 0.5) * 18;
+      const chroma = REDUCED_MOTION ? 0 : (temporalNoise(now * 0.003, star.seed + 9) - 0.5) * 14;
       const r = Math.max(0, Math.min(255, star.r + chroma));
       const b = Math.max(0, Math.min(255, star.b - chroma));
-      if (star.mag < 1.15 || level > 1.25) {
-        const glow = ctx.createRadialGradient(star.x, star.y, 0, star.x, star.y, star.radius * 7);
-        glow.addColorStop(0, `rgba(${r}, ${star.g}, ${b}, ${alpha * 0.55})`);
-        glow.addColorStop(1, `rgba(${r}, ${star.g}, ${b}, 0)`);
-        ctx.fillStyle = glow;
-        ctx.beginPath();
-        ctx.arc(star.x, star.y, star.radius * 7, 0, Math.PI * 2);
-        ctx.fill();
-      }
       ctx.fillStyle = `rgba(${r}, ${star.g}, ${b}, ${alpha})`;
-      if (star.radius <= 0.7) {
-        ctx.fillRect(star.x, star.y, 1, 1);
-      } else {
+      if (star.mag < 0.9) {
         ctx.beginPath();
-        ctx.arc(star.x, star.y, star.radius * (0.85 + 0.15 * Math.min(1, level)), 0, Math.PI * 2);
+        ctx.arc(star.x, star.y, 1.7, 0, Math.PI * 2);
         ctx.fill();
+        ctx.fillStyle = `rgba(${r}, ${star.g}, ${b}, ${alpha * 0.28})`;
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (star.mag < 2.1) {
+        ctx.fillRect(star.x, star.y, 2, 2);
+      } else {
+        ctx.fillRect(star.x, star.y, 1, 1);
       }
     }
     ctx.restore();
@@ -275,7 +296,22 @@ export function createSky(canvas) {
     ];
   }
 
-  function createMeteor(fireball) {
+  function createMeteor(fireball, featured = false) {
+    if (featured) {
+      return {
+        fireball: true,
+        x: width * 0.12,
+        y: height * 0.16,
+        angle: (14 * Math.PI) / 180,
+        length: width * 0.48,
+        duration: 0.85,
+        curve: 0.035,
+        age: 0,
+        flare: true,
+        flared: false,
+        afterglow: 0.6,
+      };
+    }
     const energy = Math.random() ** 1.7;
     const angle = pickAngle();
     let meteor = null;
@@ -443,12 +479,12 @@ export function createSky(canvas) {
     ctx.drawImage(skyLayer, 0, 0, width, height);
     ctx.save();
     ctx.globalCompositeOperation = 'screen';
-    ctx.globalAlpha = 0.76;
+    ctx.globalAlpha = 0.82;
     ctx.drawImage(milkyLayer, 0, 0, width, height);
     ctx.restore();
     drawStars(now);
     if (!opened && now - startedAt > 650) {
-      meteors.push(createMeteor(true));
+      meteors.push(createMeteor(true, true));
       opened = true;
     }
     if (now >= nextMeteor) {
