@@ -1,157 +1,93 @@
-function randomUnit() {
+function unit() {
   return Math.random() * 2 - 1;
 }
 
-function noiseBuffer(context, seconds) {
-  const length = Math.floor(context.sampleRate * seconds);
-  const buffer = context.createBuffer(2, length, context.sampleRate);
-  for (let channel = 0; channel < 2; channel += 1) {
-    const data = buffer.getChannelData(channel);
-    let brown = 0;
-    for (let index = 0; index < length; index += 1) {
-      brown = brown * 0.98 + randomUnit() * 0.08;
-      data[index] = brown + randomUnit() * 0.015;
-    }
+function writeRain(data, rate) {
+  let low = 0;
+  let mid = 0;
+  for (let index = 0; index < data.length; index += 1) {
+    const white = unit();
+    low = low * 0.985 + white * 0.035;
+    mid = mid * 0.62 + white * 0.38;
+    const seconds = index / rate;
+    const gust = 0.82 + 0.18 * Math.sin(seconds * 0.63) * Math.sin(seconds * 0.21 + 1.3);
+    data[index] = (low * 1.15 + mid * 0.28) * gust;
   }
-  return buffer;
 }
 
-function tickBuffer(context, seconds) {
+function addThunder(data, rate, atSeconds, distance) {
+  const start = Math.floor(atSeconds * rate);
+  const length = Math.floor(rate * (3.2 + Math.random() * 1.6));
+  let rumble = 0;
+  for (let index = 0; index < length && start + index < data.length; index += 1) {
+    rumble = rumble * 0.992 + unit() * 0.08;
+    const time = index / rate;
+    const envelope = time < 0.08 ? time / 0.08 : Math.exp(-(time - 0.08) / (1.1 + distance * 0.25));
+    const crack = distance < 2 && index < rate * 0.05 ? unit() * Math.exp(-index / (rate * 0.012)) * 1.6 : 0;
+    data[start + index] += (rumble * (0.7 / (1 + distance * 0.15)) + crack) * envelope;
+  }
+}
+
+function crossfade(data, rate) {
+  const fade = Math.floor(rate * 0.4);
+  for (let index = 0; index < fade; index += 1) {
+    const mix = index / fade;
+    const head = data.length - fade + index;
+    const blended = data[head] * (1 - mix) + data[index] * mix;
+    data[index] = blended;
+    data[head] = blended;
+  }
+}
+
+function makeLoop(context) {
   const rate = context.sampleRate;
+  const seconds = 18;
   const length = Math.floor(rate * seconds);
+  const left = new Float32Array(length);
+  const right = new Float32Array(length);
+  writeRain(left, rate);
+  writeRain(right, rate);
+  addThunder(left, rate, 5.5, 3.2);
+  addThunder(right, rate, 5.5, 3.2);
+  addThunder(left, rate, 13.2, 1.4);
+  addThunder(right, rate, 13.2, 1.4);
+  crossfade(left, rate);
+  crossfade(right, rate);
+  let peak = 0.001;
+  for (let index = 0; index < length; index += 1) peak = Math.max(peak, Math.abs(left[index]), Math.abs(right[index]));
   const buffer = context.createBuffer(2, length, rate);
-  for (let channel = 0; channel < 2; channel += 1) {
-    const data = buffer.getChannelData(channel);
-    const taps = Math.floor(seconds * 46);
-    for (let tap = 0; tap < taps; tap += 1) {
-      const start = Math.floor(Math.random() * length);
-      const frequency = 1500 + Math.random() ** 2 * 4500;
-      const decay = rate * (0.002 + Math.random() * 0.006);
-      const gain = 0.12 + Math.random() ** 2 * 0.7;
-      const span = Math.min(length - start, Math.floor(decay * 6));
-      for (let index = 0; index < span; index += 1) {
-        data[start + index] += Math.sin((Math.PI * 2 * frequency * index) / rate) * Math.exp(-index / decay) * gain;
-      }
-    }
+  const gain = 0.72 / peak;
+  for (let index = 0; index < length; index += 1) {
+    buffer.getChannelData(0)[index] = left[index] * gain;
+    buffer.getChannelData(1)[index] = right[index] * gain;
   }
   return buffer;
 }
 
-function mixLevel(intensity) {
-  const shaped = intensity * intensity;
-  return { wash: 0.18 + shaped * 0.9, ticks: 0.28 + intensity * 0.55 };
-}
-
-export function createRainAudio() {
+export function createRainLoop() {
   const Context = window.AudioContext || window.webkitAudioContext;
   if (!Context) return null;
   const context = new Context({ latencyHint: 'playback' });
   const master = context.createGain();
   master.gain.value = 0;
-  const compressor = context.createDynamicsCompressor();
-  compressor.threshold.value = -8;
-  compressor.ratio.value = 8;
-  master.connect(compressor).connect(context.destination);
-
-  const wash = context.createBufferSource();
-  wash.buffer = noiseBuffer(context, 8);
-  wash.loop = true;
-  const washFilter = context.createBiquadFilter();
-  washFilter.type = 'lowpass';
-  washFilter.frequency.value = 1800;
-  const washGain = context.createGain();
-  wash.connect(washFilter).connect(washGain).connect(master);
-
-  const ticks = context.createBufferSource();
-  ticks.buffer = tickBuffer(context, 6);
-  ticks.loop = true;
-  const tickFilter = context.createBiquadFilter();
-  tickFilter.type = 'highpass';
-  tickFilter.frequency.value = 900;
-  const tickGain = context.createGain();
-  ticks.connect(tickFilter).connect(tickGain).connect(master);
-
-  const thunderBus = context.createGain();
-  thunderBus.gain.value = 0.9;
-  thunderBus.connect(master);
-  wash.start();
-  ticks.start();
-
-  return { context, master, washGain, tickGain, thunderBus, running: false };
+  master.connect(context.destination);
+  const source = context.createBufferSource();
+  source.buffer = makeLoop(context);
+  source.loop = true;
+  source.connect(master);
+  source.start();
+  return { context, master, playing: false };
 }
 
-export async function resumeRainAudio(audio, { intensity, volume }) {
+export async function playRainLoop(audio) {
   if (!audio) return;
   await audio.context.resume();
-  const level = mixLevel(intensity);
-  const now = audio.context.currentTime;
-  audio.washGain.gain.setTargetAtTime(level.wash, now, 0.4);
-  audio.tickGain.gain.setTargetAtTime(level.ticks, now, 0.4);
-  audio.master.gain.cancelScheduledValues(now);
-  audio.master.gain.setTargetAtTime((volume / 100) ** 2 * 0.85, now, 0.3);
-  audio.running = true;
+  audio.master.gain.setTargetAtTime(0.9, audio.context.currentTime, 0.35);
+  audio.playing = true;
 }
 
-export function updateRainAudio(audio, { intensity, volume }) {
-  if (!audio?.running) return;
-  const level = mixLevel(intensity);
-  const now = audio.context.currentTime;
-  audio.washGain.gain.setTargetAtTime(level.wash, now, 0.3);
-  audio.tickGain.gain.setTargetAtTime(level.ticks, now, 0.3);
-  audio.master.gain.setTargetAtTime((volume / 100) ** 2 * 0.85, now, 0.15);
-}
-
-export function silenceRainAudio(audio) {
+export function hushRainLoop(audio) {
   if (!audio) return;
-  const now = audio.context.currentTime;
-  audio.master.gain.setTargetAtTime(0, now, 0.2);
-  audio.running = false;
-}
-
-export function playThunder(audio, distanceKm) {
-  if (!audio?.running) return;
-  const { context, thunderBus } = audio;
-  const rate = context.sampleRate;
-  const seconds = 4.5 + Math.random() * 3 + Math.min(3, distanceKm * 0.35);
-  const length = Math.floor(rate * seconds);
-  const data = new Float32Array(length);
-  let rumble = 0;
-  for (let index = 0; index < length; index += 1) {
-    rumble = rumble * 0.995 + randomUnit() * 0.05;
-    data[index] = rumble;
-  }
-  const peaks = 3 + Math.floor(Math.random() * 3);
-  const envelope = new Float32Array(length);
-  for (let peak = 0; peak < peaks; peak += 1) {
-    const at = (peak === 0 ? 0 : Math.random() * 0.55) * seconds;
-    const attack = 0.05 + Math.random() * 0.2;
-    const release = 0.7 + Math.random() * 1.6;
-    const height = peak === 0 ? 1 : 0.4 + Math.random() * 0.4;
-    for (let index = Math.floor(at * rate); index < length; index += 1) {
-      const time = index / rate - at;
-      const amount = time < attack ? time / attack : Math.exp(-(time - attack) / release);
-      envelope[index] = Math.max(envelope[index], amount * height);
-    }
-  }
-  if (distanceKm < 2.5) {
-    const crack = Math.floor(rate * 0.2);
-    for (let index = 0; index < crack; index += 1) data[index] += randomUnit() * Math.exp(-index / (rate * 0.04)) * 1.4;
-  }
-  let peak = 0.001;
-  for (let index = 0; index < length; index += 1) {
-    data[index] *= envelope[index];
-    peak = Math.max(peak, Math.abs(data[index]));
-  }
-  for (let index = 0; index < length; index += 1) data[index] = (data[index] / peak) * 0.8;
-  const buffer = context.createBuffer(1, length, rate);
-  buffer.copyToChannel(data, 0);
-  const source = context.createBufferSource();
-  source.buffer = buffer;
-  const filter = context.createBiquadFilter();
-  filter.type = 'lowpass';
-  filter.frequency.value = Math.max(120, 900 / (1 + distanceKm * 0.7));
-  const gain = context.createGain();
-  gain.gain.value = Math.min(1, 1.4 / (1 + distanceKm * 0.3));
-  source.connect(filter).connect(gain).connect(thunderBus);
-  source.start(context.currentTime + (distanceKm * 1000) / 343);
+  audio.master.gain.setTargetAtTime(0, audio.context.currentTime, 0.2);
+  audio.playing = false;
 }

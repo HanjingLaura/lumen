@@ -7,6 +7,6 @@
   "scripts": {
     "dev": "node server.mjs",
     "start": "node server.mjs",
-    "check": "node --check server.mjs && node --check src/app.js && node --check src/bluetooth.js && node --check src/buttonMap.js && node --check src/scenes.js && node --check src/rain/background.js && node --check src/rain/simulation.js && node --check src/rain/audio.js && node --check src/rain/stage.js"
+    "check": "node --check server.mjs && node --check src/app.js && node --check src/bluetooth.js && node --check src/buttonMap.js && node --check src/scenes.js && node --check src/rain/background.js && node --check src/rain/audio.js && node --check src/rain/stage.js && node --check vendor/raindrop-fx/index.js"
   }
 }
