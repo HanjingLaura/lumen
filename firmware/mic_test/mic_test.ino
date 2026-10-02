@@ -16,7 +16,7 @@ static const int PIN_DIN = 17;   // INMP441 SD
 static const int PIN_DOUT = -1;  // RX only
 
 static const uint32_t SAMPLE_RATE_HZ = 16000;
-static const uint32_t WINDOW_MS = 100;          // 100 ms 打印一行 RMS（给绘图器，会抹掉几毫秒的拍手）
+static const uint32_t PRINT_RMS_EVERY_MS = 1000;  // RMS/音量条多久打一行（太密会把 CLAP 顶没）
 static const uint32_t HINT_EVERY_MS = 3000;
 static const uint32_t RAW_HEX_EVERY_MS = 1000;
 static const uint32_t SLOT_PROBE_EVERY_MS = 5000;
@@ -26,8 +26,6 @@ static const int BAR_RMS_PER_HASH = 16;
 // sample24 = raw >> 8 (arithmetic). Display/RMS uses filtered sample24 >> 6.
 static const float HPF_CUTOFF_HZ = 150.0f;  // 高通截止（16 kHz 下约 150 Hz），逐点滤慢漂，不是块均值
 static const uint32_t HPF_WARMUP_MS = 200;  // 开机后滤波器建立，这段时间不报 CLAP
-static const float DRIFT_STEP_24 = 100000.0f;  // 10 ms 内 raw 均值跳变超过此值则不算拍手
-static const uint32_t DRIFT_PRINT_MS = 500;    // DRIFT 提示限速
 static const int DISPLAY_SHIFT = 6;
 static const size_t BLOCK_SAMPLES = 256;  // 16 ms at 16 kHz
 static const size_t BLOCK_BYTES = BLOCK_SAMPLES * sizeof(int32_t);
@@ -40,11 +38,14 @@ static const uint32_t SUBWIN_MS = 10;  // 子窗口：算 10 ms 峰值和短时 
 static const uint32_t SUBWIN_SAMPLES = SAMPLE_RATE_HZ * SUBWIN_MS / 1000;
 static const float BASELINE_TAU_S = 2.0f;         // 背景跟踪时间常数（秒），只在非事件时更新
 static const float BASELINE_FLOOR = 1.0f;         // 背景下限，避免除零
-static const uint32_t BASELINE_WARMUP_MS = 500;   // 上电后先学背景，再允许检测
+static const uint32_t BASELINE_WARMUP_MS = 500;   // 前 500 ms 背景可以吃所有峰值（冷启动）
+static const float BASELINE_ADMIT_X = 3.0f;       // 之后只有 peak < 此倍数×背景 才进 EMA，避免被拍手抬高
+static const uint32_t BASELINE_HOLD_MS = 150;     // 响亮事件（候选/确认/拒绝）后这么久不更新背景
 static const float CLAP_PEAK_OVER_BASE = 6.0f;    // 10 ms 峰值须超过背景的 K 倍（软键盘多半够不着）
-static const float CLAP_CREST_MIN = 4.0f;         // 波峰因数 peak/短时RMS，持续声（说话/音乐）较低
-static const uint32_t DECAY_WAIT_MS = 40;         // 峰值后再看 30–50 ms，须掉回去（默认 40）
-static const float DECAY_FRAC = 0.40f;            // 衰减门槛：确认窗口峰值 < DECAY_FRAC * 拍手峰值
+static const float CLAP_CREST_MIN = 3.0f;         // 波峰因数；削波拍手会变低，默认 3
+static const float CLIP_LEVEL_24 = 7000000.0f;    // 10 ms 峰值达到此值视为削波，不再卡 crest
+static const uint32_t DECAY_WAIT_MS = 50;         // 峰值后再看约 50 ms（响尾可跨 2–3 个 10 ms）
+static const float DECAY_FRAC = 0.50f;            // 衰减门槛：确认窗口峰值 < DECAY_FRAC * 拍手峰值
 static const uint32_t CLAP_REFRACTORY_MS = 120;   // 两次拍手之间的不应期
 static const uint32_t DOUBLE_CLAP_MIN_MS = 150;   // 双击：两拍间隔下限
 static const uint32_t DOUBLE_CLAP_MAX_MS = 600;   // 双击：两拍间隔上限
@@ -79,6 +80,7 @@ static bool baselineReady = false;
 static uint32_t baselineStartMs = 0;
 static uint32_t lastDbgMs = 0;
 static uint32_t lastClapMs = 0;
+static uint32_t lastLoudMs = 0;
 static uint32_t lastClapForDoubleMs = 0;
 static float candPeak = 0.0f;
 static float candBase = 0.0f;
@@ -88,11 +90,7 @@ static uint32_t candStartMs = 0;
 static uint8_t decayWindowsSeen = 0;
 static uint32_t subCount = 0;
 static double subSumSq = 0.0;
-static double subRawSum = 0.0;
 static float subPeak = 0.0f;
-static float prevRawMean = 0.0f;
-static bool havePrevRawMean = false;
-static uint32_t lastDriftMs = 0;
 
 static void printPinConfig() {
   Serial.println("INMP441 I2S 16kHz 32bit MONO LEFT");
@@ -160,6 +158,7 @@ static void resetClapDetector(uint32_t now) {
   baselineStartMs = now;
   lastDbgMs = now;
   lastClapMs = 0;
+  lastLoudMs = 0;
   lastClapForDoubleMs = 0;
   candPeak = 0.0f;
   candBase = 0.0f;
@@ -169,11 +168,7 @@ static void resetClapDetector(uint32_t now) {
   decayWindowsSeen = 0;
   subCount = 0;
   subSumSq = 0.0;
-  subRawSum = 0.0;
   subPeak = 0.0f;
-  prevRawMean = 0.0f;
-  havePrevRawMean = false;
-  lastDriftMs = now;
   audioStartMs = now;
   resetHpfState();
 }
@@ -205,6 +200,15 @@ static void updateBaseline(float peak10, uint32_t now) {
     }
     return;
   }
+  const bool warming = (now - baselineStartMs) < BASELINE_WARMUP_MS;
+  if (!warming) {
+    if ((lastLoudMs != 0) && ((now - lastLoudMs) < BASELINE_HOLD_MS)) {
+      return;
+    }
+    if (peak10 >= (BASELINE_ADMIT_X * baselinePeak)) {
+      return;
+    }
+  }
   if (inClapEvent(now)) {
     return;
   }
@@ -224,18 +228,10 @@ static void maybePrintDbg(uint32_t now) {
   Serial.println(static_cast<long>(baselinePeak + 0.5f));
 }
 
-static void maybePrintDrift(uint32_t now, float delta) {
-  if ((now - lastDriftMs) < DRIFT_PRINT_MS) {
-    return;
-  }
-  lastDriftMs = now;
-  Serial.print("DRIFT dmean=");
-  Serial.println(static_cast<long>(delta + ((delta >= 0.0f) ? 0.5f : -0.5f)));
-}
-
 static void confirmOrRejectClap(float followPeak, uint32_t now) {
   const bool decayed = followPeak < (candPeak * DECAY_FRAC);
   clapState = CLAP_IDLE;
+  lastLoudMs = (candStartMs != 0) ? candStartMs : now;
   if (!decayed) {
     return;
   }
@@ -258,26 +254,13 @@ static void finishSubwindow() {
   const float shortRms =
       (n > 0) ? static_cast<float>(sqrt(subSumSq / static_cast<double>(n))) : 0.0f;
   const float peak = subPeak;
-  const float rawMean = (n > 0) ? static_cast<float>(subRawSum / static_cast<double>(n)) : 0.0f;
-  const bool drifted = havePrevRawMean && (fabsf(rawMean - prevRawMean) > DRIFT_STEP_24);
-  const float driftDelta = rawMean - prevRawMean;
-  havePrevRawMean = (n > 0);
-  prevRawMean = rawMean;
   subCount = 0;
   subSumSq = 0.0;
-  subRawSum = 0.0;
   subPeak = 0.0f;
-
-  if (drifted) {
-    maybePrintDrift(now, driftDelta);
-    clapState = CLAP_IDLE;
-    maybePrintDbg(now);
-    return;
-  }
 
   if (clapState == CLAP_CONFIRM) {
     decayWindowsSeen++;
-    if ((decayWindowsSeen * SUBWIN_MS) <= 20 && peak > candPeak) {
+    if ((decayWindowsSeen * SUBWIN_MS) <= 30 && peak > candPeak) {
       candPeak = peak;
       candRatio = (candBase > 0.0f) ? (candPeak / candBase) : 0.0f;
     }
@@ -295,12 +278,15 @@ static void finishSubwindow() {
   const float base = (baselinePeak > BASELINE_FLOOR) ? baselinePeak : BASELINE_FLOOR;
   const float ratio = peak / base;
   const float crest = (shortRms > 1.0f) ? (peak / shortRms) : ((peak > 0.0f) ? 100.0f : 0.0f);
-  if (warmed && !refractory && peak > (CLAP_PEAK_OVER_BASE * base) && crest >= CLAP_CREST_MIN) {
+  const bool clipped = peak >= CLIP_LEVEL_24;
+  const bool crestOk = clipped || (crest >= CLAP_CREST_MIN);
+  if (warmed && !refractory && peak > (CLAP_PEAK_OVER_BASE * base) && crestOk) {
     candPeak = peak;
     candBase = base;
     candRatio = ratio;
     candCrest = crest;
     candStartMs = now;
+    lastLoudMs = now;
     decayWindowsSeen = 0;
     clapState = CLAP_CONFIRM;
     maybePrintDbg(now);
@@ -377,7 +363,6 @@ static void processRawSlot(int32_t raw) {
     subPeak = absAc;
   }
   subSumSq += static_cast<double>(filtered) * static_cast<double>(filtered);
-  subRawSum += static_cast<double>(sample24);
   subCount++;
   if (subCount >= SUBWIN_SAMPLES) {
     finishSubwindow();
@@ -497,7 +482,7 @@ void loop() {
   consumeSamples();
 
   const uint32_t now = millis();
-  if ((now - windowStartMs) < WINDOW_MS) {
+  if ((now - windowStartMs) < PRINT_RMS_EVERY_MS) {
     return;
   }
 
