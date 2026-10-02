@@ -15,7 +15,6 @@ export function createSky(canvas) {
   let backdrop = null;
   let brightStars = [];
   let meteors = [];
-  let trains = [];
   let sparks = [];
   let satellites = [];
   let last = 0;
@@ -80,41 +79,45 @@ export function createSky(canvas) {
       * Math.exp(-(along * along) / (2 * alongSigma * alongSigma));
   }
 
+  function milkyPoint(t, scatter = 1) {
+    const wobble = Math.sin(t * Math.PI * 2.4) * 0.03 + Math.sin(t * 11.5) * 0.012;
+    const spread = (Math.random() + Math.random() - 1) * height * 0.1 * scatter;
+    return {
+      x: width * (0.04 + t * 0.92),
+      y: height * (0.84 - t * 0.7 + wobble) + spread,
+    };
+  }
+
   function drawMilkyWay(g) {
     g.save();
     g.globalCompositeOperation = 'lighter';
-    const clouds = [
-      { x: 0.38, y: 0.58, rx: 0.34, ry: 0.16, a: 0.2, color: '168, 186, 214' },
-      { x: 0.52, y: 0.46, rx: 0.22, ry: 0.09, a: 0.16, color: '206, 204, 220' },
-      { x: 0.6, y: 0.38, rx: 0.16, ry: 0.055, a: 0.12, color: '230, 214, 190' },
-      { x: 0.3, y: 0.66, rx: 0.2, ry: 0.08, a: 0.1, color: '140, 160, 190' },
-    ];
-    for (const cloud of clouds) {
-      const x = cloud.x * width;
-      const y = cloud.y * height;
-      const rx = cloud.rx * width;
-      const gradient = g.createRadialGradient(x, y, 0, x, y, rx);
-      gradient.addColorStop(0, `rgba(${cloud.color}, ${cloud.a})`);
-      gradient.addColorStop(1, `rgba(${cloud.color}, 0)`);
+    for (let i = 0; i < 110; i += 1) {
+      const t = i / 109;
+      const point = milkyPoint(t, 0.15);
+      const presence = Math.sin(t * Math.PI);
+      const radius = height * (0.035 + presence * 0.07);
+      const alpha = 0.018 + presence * 0.04;
+      const gradient = g.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius);
+      const color = t > 0.42 && t < 0.66 ? '214, 198, 176' : '150, 170, 204';
+      gradient.addColorStop(0, `rgba(${color}, ${alpha})`);
+      gradient.addColorStop(1, `rgba(${color}, 0)`);
       g.fillStyle = gradient;
       g.beginPath();
-      g.ellipse(x, y, rx, cloud.ry * height, -0.54, 0, Math.PI * 2);
+      g.arc(point.x, point.y, radius, 0, Math.PI * 2);
       g.fill();
     }
     g.restore();
 
-    g.save();
-    g.translate(width * 0.5, height * 0.46);
-    g.rotate(-0.54);
-    g.fillStyle = 'rgba(3, 5, 12, 0.28)';
-    g.beginPath();
-    g.ellipse(-width * 0.04, height * 0.012, width * 0.22, height * 0.018, 0.1, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = 'rgba(3, 5, 12, 0.2)';
-    g.beginPath();
-    g.ellipse(width * 0.1, -height * 0.02, width * 0.14, height * 0.012, -0.2, 0, Math.PI * 2);
-    g.fill();
-    g.restore();
+    const count = Math.floor((width * height) / 520);
+    for (let i = 0; i < count; i += 1) {
+      const point = milkyPoint(Math.random(), 1);
+      if (point.x < 0 || point.y < 0 || point.x > width || point.y > height) continue;
+      const [r, gc, b] = starColor();
+      const alpha = 0.05 + Math.random() ** 2 * 0.55;
+      g.fillStyle = `rgba(${r}, ${gc}, ${b}, ${alpha})`;
+      const size = Math.random() < 0.94 ? 1 : 1.5;
+      g.fillRect(point.x, point.y, size, size);
+    }
   }
 
   function starColor() {
@@ -161,7 +164,7 @@ export function createSky(canvas) {
           radius,
           phase: Math.random() * Math.PI * 2,
           speed: 0.6 + Math.random() * 1.8,
-          spike: magnitude > 0.9,
+          spike: magnitude > 0.94,
         });
         continue;
       }
@@ -208,7 +211,7 @@ export function createSky(canvas) {
     const travel = speed * duration;
     const midX = width * (0.18 + Math.random() * 0.64);
     const midY = height * (0.12 + Math.random() * 0.58);
-    const fireball = Math.random() < 0.16;
+    const fireball = Math.random() < 0.14;
     const [cr, cg, cb] = meteorColor();
 
     return {
@@ -218,10 +221,10 @@ export function createSky(canvas) {
       vy: Math.sin(angle) * speed,
       age: 0,
       duration,
-      trail: fireball ? 0.22 + Math.random() * 0.08 : 0.1 + Math.random() * 0.08,
-      thickness: fireball ? 2.2 : 0.8 + Math.random() * 0.7,
-      glow: fireball ? 18 : 6 + Math.random() * 4,
-      peak: fireball ? 0.95 : 0.45 + Math.random() * 0.35,
+      trail: fireball ? 0.14 + Math.random() * 0.05 : 0.06 + Math.random() * 0.05,
+      thickness: fireball ? 2.4 : 1.15 + Math.random() * 0.55,
+      glow: fireball ? 16 : 8,
+      peak: fireball ? 1 : 0.75 + Math.random() * 0.25,
       cr,
       cg,
       cb,
@@ -254,31 +257,32 @@ export function createSky(canvas) {
   function drawMeteor(meteor) {
     const history = meteor.history;
     if (history.length < 2) return;
+    const tail = history[0];
     const head = history[history.length - 1];
     const strength = envelope(meteor) * meteor.peak;
     if (strength <= 0.01) return;
 
     const glow = ctx.createRadialGradient(head.x, head.y, 0, head.x, head.y, meteor.glow);
     glow.addColorStop(0, `rgba(255, 255, 255, ${strength})`);
-    glow.addColorStop(0.35, `rgba(${meteor.cr}, ${meteor.cg}, ${meteor.cb}, ${strength * 0.45})`);
+    glow.addColorStop(0.22, `rgba(${meteor.cr}, ${meteor.cg}, ${meteor.cb}, ${strength * 0.55})`);
     glow.addColorStop(1, `rgba(${meteor.cr}, ${meteor.cg}, ${meteor.cb}, 0)`);
     ctx.fillStyle = glow;
     ctx.beginPath();
     ctx.arc(head.x, head.y, meteor.glow, 0, Math.PI * 2);
     ctx.fill();
 
+    const streak = ctx.createLinearGradient(tail.x, tail.y, head.x, head.y);
+    streak.addColorStop(0, `rgba(${meteor.cr}, ${meteor.cg}, ${meteor.cb}, 0)`);
+    streak.addColorStop(0.45, `rgba(${meteor.cr}, ${meteor.cg}, ${meteor.cb}, ${strength * 0.28})`);
+    streak.addColorStop(0.82, `rgba(255, 255, 255, ${strength * 0.75})`);
+    streak.addColorStop(1, `rgba(255, 255, 255, ${strength})`);
     ctx.lineCap = 'round';
-    for (let i = 1; i < history.length; i += 1) {
-      const along = i / (history.length - 1);
-      const previous = history[i - 1];
-      const point = history[i];
-      ctx.strokeStyle = `rgba(${meteor.cr}, ${meteor.cg}, ${meteor.cb}, ${along * along * strength})`;
-      ctx.lineWidth = Math.max(0.4, meteor.thickness * along);
-      ctx.beginPath();
-      ctx.moveTo(previous.x, previous.y);
-      ctx.lineTo(point.x, point.y);
-      ctx.stroke();
-    }
+    ctx.strokeStyle = streak;
+    ctx.lineWidth = meteor.thickness;
+    ctx.beginPath();
+    ctx.moveTo(tail.x, tail.y);
+    ctx.lineTo(head.x, head.y);
+    ctx.stroke();
   }
 
   function updateMeteors(dt) {
@@ -312,34 +316,7 @@ export function createSky(canvas) {
       drawMeteor(meteor);
 
       const offscreen = meteor.x < -80 || meteor.x > width + 80 || meteor.y < -80 || meteor.y > height + 80;
-      if (meteor.age >= meteor.duration || offscreen) {
-        if (meteor.fireball && meteor.history.length > 3) {
-          trains.push({
-            points: meteor.history.map((point) => ({ x: point.x, y: point.y })),
-            age: 0,
-            life: 1.6 + Math.random() * 1.4,
-          });
-        }
-        meteors.splice(i, 1);
-      }
-    }
-  }
-
-  function drawTrains(dt) {
-    for (let i = trains.length - 1; i >= 0; i -= 1) {
-      const train = trains[i];
-      train.age += dt;
-      const fade = Math.max(0, 1 - train.age / train.life);
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = `rgba(170, 230, 190, ${fade * 0.28})`;
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      train.points.forEach((point, index) => {
-        if (index === 0) ctx.moveTo(point.x, point.y);
-        else ctx.lineTo(point.x, point.y);
-      });
-      ctx.stroke();
-      if (train.age >= train.life) trains.splice(i, 1);
+      if (meteor.age >= meteor.duration || offscreen) meteors.splice(i, 1);
     }
   }
 
@@ -399,7 +376,6 @@ export function createSky(canvas) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.drawImage(backdrop, 0, 0, width, height);
     drawTwinkles(now);
-    drawTrains(dt);
     updateMeteors(dt);
     drawSparks(dt);
     drawSatellites(dt);
@@ -436,7 +412,6 @@ export function createSky(canvas) {
     running = false;
     cancelAnimationFrame(raf);
     meteors = [];
-    trains = [];
     sparks = [];
     satellites = [];
   }
