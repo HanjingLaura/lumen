@@ -10,8 +10,7 @@
 
 1. 烧录本目录 `lumen_app.ino`，打开串口监视器 115200，按 RST。
 2. 先安静约 2 秒。然后拍 **1** 下，等约 2 秒；再连拍 **2** 下（同一组要快，间隔大约 0.2–0.5 秒），再等约 2 秒；同样再测 **3** 下、**4** 下。组与组之间隔开大约 2 秒。
-3. 每一组结束应先看到 `CLAPS:n`，紧接着 `SCENE:n`。对应那颗场景灯亮、其余灭，OLED 数字变成 n。连上 https://hanjing-laura.vercel.app/lumen/ 后，网页也应切到场景 n（BLE Notify 同样是 `SCENE:n`）。
-4. 拍 5 下或更多会打印 `CLAPS_DROP n=`，**不切场**。
-5. 再按 **BTN1–BTN4**：场景/LED/网页必须仍按按键切，和拍手互不卡住。BLE 用 nRF Connect 往 RX 写 `SCENE:n` 也照常。
+3. 每一组结束应先看到 `CLAPS:n`，紧接着 `SCENE:n`。对应那颗场景灯亮、其余灭。连上 https://hanjing-laura.vercel.app/lumen/ 后，网页也应切到场景 n。
+4. 再按 **BTN1–BTN4**：场景/LED/网页必须仍按按键切。
 
-连拍要快、组与组要隔开；说话、敲键盘不应出 `CLAPS:`。串口默认不刷 RMS/DBG；要看细节可在 `clap_detector.h` 把 `CLAP_DEBUG` 改成 `1`。
+串口默认不刷 RMS/DBG；要看细节可在 `clap_detector.h` 把 `CLAP_DEBUG` 改成 `1`。
