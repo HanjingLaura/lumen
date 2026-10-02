@@ -23,8 +23,11 @@ static const uint32_t SLOT_PROBE_EVERY_MS = 5000;
 static const int BAR_WIDTH = 32;
 static const int BAR_RMS_PER_HASH = 16;
 // INMP441: 24-bit left-justified in a 32-bit slot.
-// sample24 = raw >> 8 (arithmetic). Display/RMS uses sample24 >> 6, same as old >> 14.
-static const float DC_ALPHA = 0.001f;  // 去直流：慢速均值高通，tau ≈ 1/(alpha*fs)
+// sample24 = raw >> 8 (arithmetic). Display/RMS uses filtered sample24 >> 6.
+static const float HPF_CUTOFF_HZ = 150.0f;  // 高通截止（16 kHz 下约 150 Hz），逐点滤慢漂，不是块均值
+static const uint32_t HPF_WARMUP_MS = 200;  // 开机后滤波器建立，这段时间不报 CLAP
+static const float DRIFT_STEP_24 = 100000.0f;  // 10 ms 内 raw 均值跳变超过此值则不算拍手
+static const uint32_t DRIFT_PRINT_MS = 500;    // DRIFT 提示限速
 static const int DISPLAY_SHIFT = 6;
 static const size_t BLOCK_SAMPLES = 256;  // 16 ms at 16 kHz
 static const size_t BLOCK_BYTES = BLOCK_SAMPLES * sizeof(int32_t);
@@ -32,7 +35,7 @@ static const size_t BLOCK_BYTES = BLOCK_SAMPLES * sizeof(int32_t);
 static const uint32_t READ_TIMEOUT_MS = 20;
 static const uint8_t ZERO_WINDOWS_BEFORE_PROBE = 10;  // ~1 s of all-zero LEFT
 
-// ---- 拍手检测（单位都是去直流后的 24 位 PCM |sample24|，不是显示用 RMS）----
+// ---- 拍手检测（单位都是高通后的 |sample24|，不是显示用 RMS）----
 static const uint32_t SUBWIN_MS = 10;  // 子窗口：算 10 ms 峰值和短时 RMS
 static const uint32_t SUBWIN_SAMPLES = SAMPLE_RATE_HZ * SUBWIN_MS / 1000;
 static const float BASELINE_TAU_S = 2.0f;         // 背景跟踪时间常数（秒），只在非事件时更新
@@ -52,7 +55,9 @@ static I2SClass i2s;
 static uint8_t leftover[sizeof(int32_t)];
 static size_t leftoverLen = 0;
 
-static float dcMean = 0.0f;
+static float hpfB0 = 0.0f, hpfB1 = 0.0f, hpfB2 = 0.0f, hpfA1 = 0.0f, hpfA2 = 0.0f;
+static float hpfX1 = 0.0f, hpfX2 = 0.0f, hpfY1 = 0.0f, hpfY2 = 0.0f;
+static uint32_t audioStartMs = 0;
 static double sumSq = 0.0;
 static uint32_t sampleCount = 0;
 static int32_t min24 = INT32_MAX;
@@ -83,7 +88,11 @@ static uint32_t candStartMs = 0;
 static uint8_t decayWindowsSeen = 0;
 static uint32_t subCount = 0;
 static double subSumSq = 0.0;
+static double subRawSum = 0.0;
 static float subPeak = 0.0f;
+static float prevRawMean = 0.0f;
+static bool havePrevRawMean = false;
+static uint32_t lastDriftMs = 0;
 
 static void printPinConfig() {
   Serial.println("INMP441 I2S 16kHz 32bit MONO LEFT");
@@ -100,6 +109,38 @@ static void printHex32(uint32_t value) {
   for (int i = 7; i >= 0; i--) {
     Serial.print((value >> (i * 4)) & 0xF, HEX);
   }
+}
+
+static void resetHpfState() {
+  hpfX1 = 0.0f;
+  hpfX2 = 0.0f;
+  hpfY1 = 0.0f;
+  hpfY2 = 0.0f;
+}
+
+// 2nd-order Butterworth high-pass (RBJ), coefficients from HPF_CUTOFF_HZ.
+static void initHpf() {
+  const float w0 = 2.0f * 3.14159265f * HPF_CUTOFF_HZ / static_cast<float>(SAMPLE_RATE_HZ);
+  const float cosw = cosf(w0);
+  const float sinw = sinf(w0);
+  const float q = 0.70710678f;
+  const float alpha = sinw / (2.0f * q);
+  const float a0 = 1.0f + alpha;
+  hpfB0 = ((1.0f + cosw) * 0.5f) / a0;
+  hpfB1 = (-(1.0f + cosw)) / a0;
+  hpfB2 = ((1.0f + cosw) * 0.5f) / a0;
+  hpfA1 = (-2.0f * cosw) / a0;
+  hpfA2 = (1.0f - alpha) / a0;
+  resetHpfState();
+}
+
+static float hpfProcess(float x) {
+  const float y = hpfB0 * x + hpfB1 * hpfX1 + hpfB2 * hpfX2 - hpfA1 * hpfY1 - hpfA2 * hpfY2;
+  hpfX2 = hpfX1;
+  hpfX1 = x;
+  hpfY2 = hpfY1;
+  hpfY1 = y;
+  return y;
 }
 
 static void resetWindow(uint32_t now) {
@@ -128,7 +169,13 @@ static void resetClapDetector(uint32_t now) {
   decayWindowsSeen = 0;
   subCount = 0;
   subSumSq = 0.0;
+  subRawSum = 0.0;
   subPeak = 0.0f;
+  prevRawMean = 0.0f;
+  havePrevRawMean = false;
+  lastDriftMs = now;
+  audioStartMs = now;
+  resetHpfState();
 }
 
 static void printClap(float peak, float base, float ratio, float crest) {
@@ -177,6 +224,15 @@ static void maybePrintDbg(uint32_t now) {
   Serial.println(static_cast<long>(baselinePeak + 0.5f));
 }
 
+static void maybePrintDrift(uint32_t now, float delta) {
+  if ((now - lastDriftMs) < DRIFT_PRINT_MS) {
+    return;
+  }
+  lastDriftMs = now;
+  Serial.print("DRIFT dmean=");
+  Serial.println(static_cast<long>(delta + ((delta >= 0.0f) ? 0.5f : -0.5f)));
+}
+
 static void confirmOrRejectClap(float followPeak, uint32_t now) {
   const bool decayed = followPeak < (candPeak * DECAY_FRAC);
   clapState = CLAP_IDLE;
@@ -198,12 +254,26 @@ static void confirmOrRejectClap(float followPeak, uint32_t now) {
 
 static void finishSubwindow() {
   const uint32_t now = millis();
+  const uint32_t n = subCount;
   const float shortRms =
-      (subCount > 0) ? static_cast<float>(sqrt(subSumSq / static_cast<double>(subCount))) : 0.0f;
+      (n > 0) ? static_cast<float>(sqrt(subSumSq / static_cast<double>(n))) : 0.0f;
   const float peak = subPeak;
+  const float rawMean = (n > 0) ? static_cast<float>(subRawSum / static_cast<double>(n)) : 0.0f;
+  const bool drifted = havePrevRawMean && (fabsf(rawMean - prevRawMean) > DRIFT_STEP_24);
+  const float driftDelta = rawMean - prevRawMean;
+  havePrevRawMean = (n > 0);
+  prevRawMean = rawMean;
   subCount = 0;
   subSumSq = 0.0;
+  subRawSum = 0.0;
   subPeak = 0.0f;
+
+  if (drifted) {
+    maybePrintDrift(now, driftDelta);
+    clapState = CLAP_IDLE;
+    maybePrintDbg(now);
+    return;
+  }
 
   if (clapState == CLAP_CONFIRM) {
     decayWindowsSeen++;
@@ -218,7 +288,9 @@ static void finishSubwindow() {
     return;
   }
 
-  const bool warmed = baselineReady && ((now - baselineStartMs) >= BASELINE_WARMUP_MS);
+  const bool hpfWarm = (now - audioStartMs) < HPF_WARMUP_MS;
+  const bool warmed =
+      !hpfWarm && baselineReady && ((now - baselineStartMs) >= BASELINE_WARMUP_MS);
   const bool refractory = (lastClapMs != 0) && ((now - lastClapMs) < CLAP_REFRACTORY_MS);
   const float base = (baselinePeak > BASELINE_FLOOR) ? baselinePeak : BASELINE_FLOOR;
   const float ratio = peak / base;
@@ -235,7 +307,9 @@ static void finishSubwindow() {
     return;
   }
 
-  updateBaseline(peak, now);
+  if (!hpfWarm) {
+    updateBaseline(peak, now);
+  }
   maybePrintDbg(now);
 }
 
@@ -293,17 +367,17 @@ static void processRawSlot(int32_t raw) {
     haveRawExample = true;
   }
 
-  dcMean += (static_cast<float>(sample24) - dcMean) * DC_ALPHA;
-  const float ac24 = static_cast<float>(sample24) - dcMean;
-  const float acDisp = ac24 / static_cast<float>(1 << DISPLAY_SHIFT);
+  const float filtered = hpfProcess(static_cast<float>(sample24));
+  const float acDisp = filtered / static_cast<float>(1 << DISPLAY_SHIFT);
   sumSq += static_cast<double>(acDisp) * static_cast<double>(acDisp);
   sampleCount++;
 
-  const float absAc = (ac24 >= 0.0f) ? ac24 : -ac24;
+  const float absAc = (filtered >= 0.0f) ? filtered : -filtered;
   if (absAc > subPeak) {
     subPeak = absAc;
   }
-  subSumSq += static_cast<double>(ac24) * static_cast<double>(ac24);
+  subSumSq += static_cast<double>(filtered) * static_cast<double>(filtered);
+  subRawSum += static_cast<double>(sample24);
   subCount++;
   if (subCount >= SUBWIN_SAMPLES) {
     finishSubwindow();
@@ -408,6 +482,7 @@ void setup() {
   }
 
   const uint32_t now = millis();
+  initHpf();
   resetWindow(now);
   resetClapDetector(now);
   lastHintMs = now;
