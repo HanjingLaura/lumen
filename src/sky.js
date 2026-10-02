@@ -54,7 +54,6 @@ export function createSky(canvas) {
     g.fillStyle = airglow;
     g.fillRect(0, height * 0.62, width, height * 0.38);
 
-    drawMilkyWay(g);
     paintStars(g);
     drawVignette(g);
     backdrop = layer;
@@ -64,7 +63,7 @@ export function createSky(canvas) {
     glow.height = layer.height;
     const glowCtx = glow.getContext('2d');
     glowCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawMilkyGlow(glowCtx, 1.05);
+    drawMilkyWay(glowCtx);
     glowLayer = glow;
   }
 
@@ -115,7 +114,7 @@ export function createSky(canvas) {
       const point = milkyPoint(t, 0.15);
       const presence = Math.sin(t * Math.PI);
       const radius = height * (0.035 + presence * 0.07);
-      const alpha = (0.02 + presence * 0.045) * strength;
+      const alpha = (0.008 + presence * 0.018) * strength;
       const gradient = g.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius);
       const color = t > 0.42 && t < 0.66 ? '214, 198, 176' : '150, 170, 204';
       gradient.addColorStop(0, `rgba(${color}, ${alpha})`);
@@ -129,8 +128,8 @@ export function createSky(canvas) {
   }
 
   function drawMilkyWay(g) {
-    drawMilkyGlow(g, 0.85);
-    const count = Math.floor((width * height) / 520);
+    drawMilkyGlow(g, 0.55);
+    const count = Math.floor((width * height) / 260);
     for (let i = 0; i < count; i += 1) {
       const point = milkyPoint(Math.random(), 1);
       if (point.x < 0 || point.y < 0 || point.x > width || point.y > height) continue;
@@ -372,15 +371,15 @@ export function createSky(canvas) {
     if (REDUCED_MOTION) return;
     for (const star of brightStars) {
       const drift = 0.9 + 0.1 * Math.sin(now * 0.0004 * star.speed + star.phase);
-      const flicker = (0.45 + 0.55 * breath) * drift;
+      const flicker = (0.82 + 0.18 * breath) * drift;
       const alpha = Math.min(1, star.alpha * flicker);
-      const radius = star.radius * (0.7 + 0.55 * breath);
+      const radius = star.radius * (0.92 + 0.12 * breath);
       ctx.fillStyle = `rgba(${star.r}, ${star.g}, ${star.b}, ${alpha})`;
       ctx.beginPath();
       ctx.arc(star.x, star.y, radius, 0, Math.PI * 2);
       ctx.fill();
       if (!star.spike) continue;
-      const length = star.radius * (4 + 5 * breath) * drift;
+      const length = star.radius * 6.2 * drift;
       ctx.strokeStyle = `rgba(${star.r}, ${star.g}, ${star.b}, ${alpha * 0.4})`;
       ctx.lineWidth = 0.55;
       ctx.beginPath();
@@ -400,12 +399,9 @@ export function createSky(canvas) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.drawImage(backdrop, 0, 0, width, height);
     const breath = REDUCED_MOTION ? 0.75 : breathAmount(now / 1000);
-    if (!REDUCED_MOTION && glowLayer) {
-      ctx.fillStyle = `rgba(1, 2, 8, ${(1 - breath) * 0.22})`;
-      ctx.fillRect(0, 0, width, height);
+    if (glowLayer) {
       ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = 0.28 + 0.72 * breath;
+      ctx.globalAlpha = REDUCED_MOTION ? 0.9 : 0.62 + 0.38 * breath;
       ctx.drawImage(glowLayer, 0, 0, width, height);
       ctx.restore();
     }
