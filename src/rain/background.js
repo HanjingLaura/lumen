@@ -1,111 +1,86 @@
 function glow(context, x, y, radius, color, alpha) {
   const paint = context.createRadialGradient(x, y, 0, x, y, radius);
-  paint.addColorStop(0, color.replace('ALPHA', String(alpha)));
-  paint.addColorStop(0.65, color.replace('ALPHA', String(alpha * 0.35)));
-  paint.addColorStop(1, color.replace('ALPHA', '0'));
+  paint.addColorStop(0, color.replace('A', String(alpha)));
+  paint.addColorStop(0.7, color.replace('A', String(alpha * 0.35)));
+  paint.addColorStop(1, color.replace('A', '0'));
   context.fillStyle = paint;
   context.beginPath();
   context.arc(x, y, radius, 0, Math.PI * 2);
   context.fill();
 }
 
-/**
- * A blue-hour river bank, drawn once and reused behind the glass.
- * The rain, mist and refraction stay the same; only this backdrop differs
- * from a dense neon city.
- */
-export function paintHarbor(context, width, height) {
+function mulberry32(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let value = Math.imul(state ^ (state >>> 15), state | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Night city behind the glass: purple sky, lit windows, neon, street lights. */
+export function paintNightCity(canvas) {
+  const context = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+  const random = mulberry32(0xc17a);
   const sky = context.createLinearGradient(0, 0, 0, height);
-  sky.addColorStop(0, '#07131c');
-  sky.addColorStop(0.38, '#14384a');
-  sky.addColorStop(0.62, '#1d5960');
-  sky.addColorStop(1, '#081014');
+  sky.addColorStop(0, '#24143f');
+  sky.addColorStop(0.42, '#4a2a68');
+  sky.addColorStop(0.72, '#8a4560');
+  sky.addColorStop(1, '#1a1020');
   context.fillStyle = sky;
   context.fillRect(0, 0, width, height);
 
-  glow(context, width * 0.78, height * 0.16, Math.min(width, height) * 0.22, 'rgba(186, 220, 214, ALPHA)', 0.22);
-
-  const horizon = height * 0.64;
-  context.fillStyle = '#0c242c';
-  context.beginPath();
-  context.moveTo(0, horizon);
-  for (let x = 0; x <= width; x += 24) {
-    const hill = Math.sin(x * 0.004) * height * 0.03 + Math.sin(x * 0.011) * height * 0.012;
-    context.lineTo(x, horizon - height * 0.08 + hill);
-  }
-  context.lineTo(width, height);
-  context.lineTo(0, height);
-  context.fill();
-
-  const waterTop = height * 0.7;
-  const water = context.createLinearGradient(0, waterTop, 0, height);
-  water.addColorStop(0, '#0a2c34');
-  water.addColorStop(1, '#061014');
-  context.fillStyle = water;
-  context.fillRect(0, waterTop, width, height - waterTop);
-
-  const unit = Math.max(width, height) / 70;
-  let cursor = -unit * 2;
-  const buildings = [];
-  while (cursor < width) {
-    const block = unit * (2.2 + Math.random() * 4.2);
-    const rise = unit * (4 + Math.random() * 14);
-    buildings.push({ x: cursor, width: block, top: waterTop - rise });
-    cursor += block + unit * (0.3 + Math.random() * 0.8);
-  }
-  for (const building of buildings) {
-    context.fillStyle = '#102028';
-    context.fillRect(building.x, building.top, building.width, waterTop - building.top);
-    const pane = unit * 0.32;
-    for (let y = building.top + pane; y < waterTop - pane; y += pane * 1.7) {
-      for (let x = building.x + pane * 0.4; x < building.x + building.width - pane; x += pane * 1.8) {
-        if (Math.random() > 0.55) continue;
-        const cool = Math.random() > 0.72;
-        context.fillStyle = cool
-          ? `rgba(150, 214, 206, ${0.35 + Math.random() * 0.45})`
-          : `rgba(255, 214, 156, ${0.28 + Math.random() * 0.4})`;
-        context.fillRect(x, y, pane, pane * 1.15);
+  const unit = Math.max(width, height) / 60;
+  const layers = [
+    { base: 0.7, maxH: 0.42, color: '#3a3358', lit: 0.45, alpha: 0.85 },
+    { base: 0.8, maxH: 0.52, color: '#241c3c', lit: 0.55, alpha: 0.95 },
+    { base: 0.92, maxH: 0.48, color: '#161226', lit: 0.5, alpha: 1 },
+  ];
+  for (const layer of layers) {
+    let x = -random() * unit * 3;
+    while (x < width) {
+      const block = unit * (2.5 + 5 * random());
+      const rise = height * layer.maxH * (0.3 + 0.7 * random());
+      const top = height * layer.base - rise;
+      context.fillStyle = layer.color;
+      context.fillRect(x, top, block, height - top);
+      const paneW = unit * 0.35;
+      const paneH = unit * 0.5;
+      for (let y = top + paneH; y < height * layer.base - paneH; y += paneH * 1.8) {
+        for (let px = x + paneW; px < x + block - paneW; px += paneW * 1.9) {
+          if (random() > layer.lit) continue;
+          const warm = random() > 0.25;
+          const alpha = layer.alpha * (0.45 + 0.55 * random());
+          context.fillStyle = warm
+            ? `rgba(255, ${170 + Math.floor(60 * random())}, ${80 + Math.floor(60 * random())}, ${alpha})`
+            : `rgba(${150 + Math.floor(60 * random())}, ${190 + Math.floor(40 * random())}, 255, ${alpha})`;
+          context.fillRect(px, y, paneW, paneH);
+        }
       }
+      x += block + unit * random() * 0.6;
     }
   }
 
-  context.strokeStyle = '#163038';
-  context.lineWidth = Math.max(2, unit * 0.35);
-  context.beginPath();
-  context.moveTo(0, waterTop - unit * 2);
-  context.quadraticCurveTo(width * 0.5, waterTop - unit * 8, width, waterTop - unit * 1.4);
-  context.stroke();
+  const neons = ['rgba(255,60,140,A)', 'rgba(60,220,255,A)', 'rgba(255,120,40,A)', 'rgba(160,90,255,A)'];
+  for (let index = 0; index < 4; index += 1) {
+    const x = random() * width;
+    const y = height * (0.6 + 0.2 * random());
+    const signW = unit * (4 + 6 * random());
+    const signH = unit * 1.4;
+    context.fillStyle = neons[index].replace('A', '0.95');
+    context.fillRect(x, y, signW, signH);
+    glow(context, x + signW * 0.5, y, unit * 8, neons[index], 0.55);
+  }
 
   context.globalCompositeOperation = 'lighter';
-  for (const building of buildings) {
-    if (Math.random() > 0.45) continue;
-    const x = building.x + building.width * 0.5;
-    glow(context, x, waterTop + (height - waterTop) * (0.15 + Math.random() * 0.45), unit * (1.2 + Math.random() * 2), 'rgba(120, 210, 196, ALPHA)', 0.18);
-    context.fillStyle = 'rgba(170, 230, 220, 0.18)';
-    context.fillRect(x - 1, waterTop, 2, (height - waterTop) * 0.55);
+  for (let index = 0; index < 26; index += 1) {
+    const pick = random();
+    const color = pick < 0.35 ? 'rgba(255,40,30,A)' : pick < 0.65 ? 'rgba(255,245,220,A)' : 'rgba(255,170,60,A)';
+    glow(context, random() * width, height * (0.84 + 0.14 * random()), unit * (0.8 + 2.2 * random()), color, 0.35 + 0.4 * random());
   }
   context.globalCompositeOperation = 'source-over';
-}
-
-export function soften(source, amount) {
-  const passes = 2 + Math.round(amount * 4);
-  let current = source;
-  let scale = 1;
-  for (let step = 0; step < passes; step += 1) {
-    scale *= 2;
-    const next = document.createElement('canvas');
-    next.width = Math.max(1, Math.round(source.width / scale));
-    next.height = Math.max(1, Math.round(source.height / scale));
-    const context = next.getContext('2d');
-    context.imageSmoothingEnabled = true;
-    context.drawImage(current, 0, 0, next.width, next.height);
-    current = next;
-  }
-  const result = document.createElement('canvas');
-  result.width = source.width;
-  result.height = source.height;
-  const context = result.getContext('2d');
-  context.imageSmoothingEnabled = true;
-  context.drawImage(current, 0, 0, result.width, result.height);
-  return result;
+  return canvas.toDataURL('image/jpeg', 0.86);
 }
