@@ -1,3 +1,4 @@
+import { mountOcean } from './ocean/player.js';
 import { mountRain } from './rain/stage.js';
 import { LumenBluetooth } from './bluetooth.js';
 import { loadButtonMap, saveButtonMap, sceneIdForButton } from './buttonMap.js';
@@ -6,6 +7,7 @@ import { SCENES, SCENES_BY_ID } from './scenes.js';
 const $ = (selector) => document.querySelector(selector);
 const state = { sceneId: 1, buttonId: 1, source: 'Mock', buttonMap: loadButtonMap() };
 const rain = mountRain($('#sceneCanvas'));
+const ocean = mountOcean($('#ocean'));
 
 function announce(message) {
   $('#toast').textContent = message;
@@ -20,6 +22,7 @@ function activateScene(sceneId, source = 'Mock', buttonId = null) {
   $('#sceneMark').textContent = String(scene.id);
   $('#scene').dataset.scene = String(scene.id);
   rain?.setActive(scene.id === 1);
+  ocean.setActive(scene.id === 3);
   document.querySelectorAll('.key').forEach((key) => key.classList.toggle('active', Number(key.dataset.button) === buttonId));
 }
 
@@ -49,12 +52,13 @@ function renderMapping() {
   }));
 }
 
-function unlockRain() {
+function unlockAudio() {
   rain?.unlock();
+  ocean.unlock();
 }
-window.addEventListener('pointerdown', unlockRain, { once: true });
+window.addEventListener('pointerdown', unlockAudio);
 document.addEventListener('keydown', (event) => {
-  unlockRain();
+  unlockAudio();
   if (event.target instanceof HTMLElement && event.target.matches('input, select, textarea')) return;
   const buttonId = Number(event.key);
   if (buttonId >= 1 && buttonId <= 4) {
