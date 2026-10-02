@@ -98,7 +98,7 @@ BTNn 直接切到场景 n，并刷新 OLED 占位数字、点亮对应 LED。上
 | 3 | BTN3 / `SCENE:3` | G12 | 慢呼吸：约 3–4 秒一个来回，中间过渡做了伽马校正 | LED3 匀速地亮—暗循环，没有阶梯感；其余灭 |
 | 4 | BTN4 / `SCENE:4` | G13 | 常亮（亮度压过，不刺眼） | LED4 稳定亮着不动；其余灭 |
 
-验证：上电应只有 LED1 在闪。按 BTN2 / BTN3 / BTN4（或在串口/BLE 发 `SCENE:n`），对应灯立刻换成上面那种效果，前一颗马上灭。OLED 数字和串口 `SCENE:n` 必须一起变。
+验证：上电应只有 LED1 在闪。按 BTN2 / BTN3 / BTN4（或用 nRF Connect 往 BLE RX 写 `SCENE:n`），对应灯立刻换成上面那种效果，前一颗马上灭。OLED 数字和串口打印的 `SCENE:n` 必须一起变。串口只输出这一行，不读命令。
 
 BLE 使用 Nordic UART：服务 `6e400001-b5a3-f393-e0a9-e50e24dcca9e`，TX/Notify `6e400003-b5a3-f393-e0a9-e50e24dcca9e`，RX/Write `6e400002-b5a3-f393-e0a9-e50e24dcca9e`。通知同样是 `SCENE:n` 这一行（以 `\n` 结尾），和网页解析格式一致。
 
@@ -111,7 +111,7 @@ BLE 使用 Nordic UART：服务 `6e400001-b5a3-f393-e0a9-e50e24dcca9e`，TX/Noti
 3. 点右上角 **调试**，再点 **连接 Lumen 按键**（或「连接设备」）。
 4. 在弹出的设备列表里选 **Lumen-XXXX**（串口监视器里 `BLE ADV` 那一行就是这个名字）。
 5. 网页状态应变为「Lumen 已连接」，串口打印 `BLE CONNECTED`。连接成功后固件会立刻 Notify 当前场景（上电默认 `SCENE:1`）。
-6. 按板上 **BTN1–BTN4**：OLED/串口切场景，网页应跟着切到场景 1–4。
+6. 按板上 **BTN1–BTN4**：OLED/串口切场景，对应 LED 亮、其余灭，网页应跟着切到场景 1–4。
 
 ### 连不上时
 
