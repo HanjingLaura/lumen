@@ -9,6 +9,7 @@
   </head>
   <body>
     <main class="scene" id="scene" data-scene="1">
+      <canvas id="sceneCanvas" aria-hidden="true"></canvas>
       <canvas class="sky" id="sky" hidden aria-hidden="true"></canvas>
       <span class="scene-mark" id="sceneMark">1</span>
       <button class="bench-entry" id="benchEntry" type="button">调试</button>
@@ -27,6 +28,7 @@
       <button class="bench-text" id="resetMapButton" type="button">恢复默认映射</button>
       <p class="bench-toast" id="toast" role="status" aria-live="polite"></p>
     </dialog>
+    <script src="/lumen/vendor/raindrop-fx/index.js"></script>
     <script type="module" src="/lumen/src/app.js"></script>
   </body>
 </html>

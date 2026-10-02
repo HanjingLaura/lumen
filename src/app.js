@@ -1,3 +1,4 @@
+import { mountRain } from './rain/stage.js';
 import { LumenBluetooth } from './bluetooth.js';
 import { loadButtonMap, saveButtonMap, sceneIdForButton } from './buttonMap.js';
 import { SCENES, SCENES_BY_ID } from './scenes.js';
@@ -5,6 +6,7 @@ import { setSkyActive } from './sky.js';
 
 const $ = (selector) => document.querySelector(selector);
 const state = { sceneId: 1, buttonId: 1, source: 'Mock', buttonMap: loadButtonMap() };
+const rain = mountRain($('#sceneCanvas'));
 
 function announce(message) {
   $('#toast').textContent = message;
@@ -18,6 +20,7 @@ function activateScene(sceneId, source = 'Mock', buttonId = null) {
   state.buttonId = buttonId;
   $('#sceneMark').textContent = String(scene.id);
   $('#scene').dataset.scene = String(scene.id);
+  rain?.setActive(scene.id === 1);
   setSkyActive(scene.id === 2);
   document.querySelectorAll('.key').forEach((key) => key.classList.toggle('active', Number(key.dataset.button) === buttonId));
 }
@@ -48,7 +51,12 @@ function renderMapping() {
   }));
 }
 
+function unlockRain() {
+  rain?.unlock();
+}
+window.addEventListener('pointerdown', unlockRain, { once: true });
 document.addEventListener('keydown', (event) => {
+  unlockRain();
   if (event.target instanceof HTMLElement && event.target.matches('input, select, textarea')) return;
   const buttonId = Number(event.key);
   if (buttonId >= 1 && buttonId <= 4) {
