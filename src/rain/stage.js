@@ -1,7 +1,7 @@
 import { paintNightCity } from './background.js';
 import { createRainLoop, hushRainLoop, playRainLoop } from './audio.js';
 
-export function mountRain(canvas) {
+export function mountGlass(canvas, { paint, createLoop, playLoop, hushLoop, errorId, defer = false }) {
   const RaindropFX = window.RaindropFX;
   if (!RaindropFX) return null;
 
@@ -34,7 +34,7 @@ export function mountRain(canvas) {
       const plate = document.createElement('canvas');
       plate.width = 1600;
       plate.height = 900;
-      const background = paintNightCity(plate);
+      const background = paint(plate);
       effect = new RaindropFX({
         canvas,
         background,
@@ -50,7 +50,7 @@ export function mountRain(canvas) {
     })().catch((error) => {
       console.error(error);
       const note = document.createElement('p');
-      note.id = 'rainError';
+      note.id = errorId;
       note.textContent = error?.message || String(error);
       note.style.cssText = 'position:fixed;left:24px;bottom:24px;z-index:3;color:#fff;font:14px sans-serif;';
       document.body.appendChild(note);
@@ -79,20 +79,20 @@ export function mountRain(canvas) {
     effect.resize(width, height);
   });
   observer.observe(canvas);
-  boot();
+  if (!defer) boot();
 
   return {
     async setActive(next) {
       active = next;
       await setRunning(next);
-      if (next && unlocked) await playRainLoop(audio);
-      else hushRainLoop(audio);
+      if (next && unlocked) await playLoop(audio);
+      else hushLoop(audio);
     },
     async unlock() {
       if (unlocked) return;
       unlocked = true;
-      if (!audio) audio = createRainLoop();
-      if (active) await playRainLoop(audio);
+      if (!audio) audio = createLoop();
+      if (active) await playLoop(audio);
     },
     destroy() {
       observer.disconnect();
@@ -100,4 +100,14 @@ export function mountRain(canvas) {
       audio?.context.close();
     },
   };
+}
+
+export function mountRain(canvas) {
+  return mountGlass(canvas, {
+    paint: paintNightCity,
+    createLoop: createRainLoop,
+    playLoop: playRainLoop,
+    hushLoop: hushRainLoop,
+    errorId: 'rainError',
+  });
 }

@@ -10,7 +10,7 @@ const $ = (selector) => document.querySelector(selector);
 const state = { sceneId: 1, buttonId: 1, source: 'Mock', buttonMap: loadButtonMap() };
 const rain = mountRain($('#sceneCanvas'));
 const clouds = mountClouds($('#skyCanvas'));
-const snow = mountSnow($('#snowCanvas'));
+const snow = mountSnow($('#snowCanvas'), $('#snowAir'));
 
 function announce(message) {
   $('#toast').textContent = message;
