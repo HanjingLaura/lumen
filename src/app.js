@@ -22,7 +22,6 @@ function activateScene(sceneId, source = 'Mock', buttonId = null) {
   state.sceneId = scene.id;
   state.source = source;
   state.buttonId = buttonId;
-  $('#sceneMark').textContent = String(scene.id);
   $('#scene').dataset.scene = String(scene.id);
   const glass = scene.id === 1 ? 'city' : scene.id === 4 ? 'snow' : null;
   rain?.setLook(glass);
