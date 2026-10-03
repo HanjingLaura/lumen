@@ -1,4 +1,5 @@
 import { mountSnow } from './snow/stage.js';
+import { mountSnowGlass } from './snow/glass.js';
 import { mountClouds } from './sky/clouds.js';
 import { mountRain } from './rain/stage.js';
 import { LumenBluetooth } from './bluetooth.js';
@@ -11,6 +12,7 @@ const state = { sceneId: 1, buttonId: 1, source: 'Mock', buttonMap: loadButtonMa
 const rain = mountRain($('#sceneCanvas'));
 const clouds = mountClouds($('#skyCanvas'));
 const snow = mountSnow($('#snowAir'));
+const snowGlass = mountSnowGlass($('#snowGlass'));
 
 function announce(message) {
   $('#toast').textContent = message;
@@ -23,8 +25,8 @@ function activateScene(sceneId, source = 'Mock', buttonId = null) {
   state.source = source;
   state.buttonId = buttonId;
   $('#scene').dataset.scene = String(scene.id);
-  const glass = scene.id === 1 ? 'city' : scene.id === 4 ? 'snow' : null;
-  rain?.setLook(glass);
+  rain?.setLook(scene.id === 1 ? 'city' : null);
+  snowGlass.setActive(scene.id === 4);
   setSkyActive(scene.id === 2);
   clouds?.setActive(scene.id === 3);
   snow?.setActive(scene.id === 4);
