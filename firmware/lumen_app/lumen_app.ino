@@ -5,6 +5,7 @@
 #include "ble_link.h"
 #include "config.h"
 #include "hw_display.h"
+#include "hw_leds.h"
 #include "scene.h"
 
 static uint8_t sceneIndex = 0;
@@ -31,6 +32,7 @@ static void enterScene(uint8_t index) {
   Serial.print("SCENE:");
   Serial.println(s.id);
   bleNotifyScene(s.id);
+  ledsAllOff();  // other scene LEDs off immediately; the new scene lights its own
   s.enter();
 }
 
@@ -58,6 +60,7 @@ void setup() {
   pinMode(PIN_BTN4, INPUT_PULLUP);
 
   displayBegin();  // if no OLED, serial-only still works
+  ledsBegin();
   bleBegin();
 
   Serial.println("LUMEN READY");
