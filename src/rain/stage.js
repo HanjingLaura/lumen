@@ -1,4 +1,5 @@
 import { paintNightCity } from './background.js';
+import { paintSnowNight } from '../snow/background.js';
 import { createRainLoop, hushRainLoop, playRainLoop } from './audio.js';
 
 export function mountRain(canvas) {
@@ -9,9 +10,12 @@ export function mountRain(canvas) {
   let running = false;
   let ready = false;
   let booting = null;
-  let active = false;
+  let look = null;
+  let request = 0;
   let audio = null;
   let unlocked = false;
+  let city = null;
+  let snow = null;
 
   function viewSize() {
     const bounds = canvas.getBoundingClientRect();
@@ -19,6 +23,13 @@ export function mountRain(canvas) {
       width: Math.max(1, Math.round(bounds.width)),
       height: Math.max(1, Math.round(bounds.height)),
     };
+  }
+
+  function plate(paint) {
+    const canvasPlate = document.createElement('canvas');
+    canvasPlate.width = 1600;
+    canvasPlate.height = 900;
+    return paint(canvasPlate);
   }
 
   async function boot() {
@@ -31,19 +42,17 @@ export function mountRain(canvas) {
       }
       canvas.width = size.width;
       canvas.height = size.height;
-      const plate = document.createElement('canvas');
-      plate.width = 1600;
-      plate.height = 900;
-      const background = paintNightCity(plate);
+      city = plate(paintNightCity);
+      snow = plate(paintSnowNight);
       effect = new RaindropFX({
         canvas,
-        background,
+        background: city,
         backgroundBlurSteps: 2,
       });
       await effect.start();
       ready = true;
       running = true;
-      if (!active) {
+      if (!look) {
         effect.stop();
         running = false;
       }
@@ -73,7 +82,7 @@ export function mountRain(canvas) {
   }
 
   const observer = new ResizeObserver(() => {
-    if (!effect || !ready || !active) return;
+    if (!effect || !ready || !look) return;
     const { width, height } = viewSize();
     if (width < 2 || height < 2) return;
     effect.resize(width, height);
@@ -82,17 +91,22 @@ export function mountRain(canvas) {
   boot();
 
   return {
-    async setActive(next) {
-      active = next;
-      await setRunning(next);
-      if (next && unlocked) await playRainLoop(audio);
+    async setLook(next) {
+      const ticket = ++request;
+      const showing = next === 'city' || next === 'snow';
+      look = showing ? next : null;
+      await setRunning(showing);
+      if (ticket !== request) return;
+      if (showing && effect) await effect.setBackground(next === 'snow' ? snow : city);
+      if (ticket !== request) return;
+      if (next === 'city' && unlocked) await playRainLoop(audio);
       else hushRainLoop(audio);
     },
     async unlock() {
       if (unlocked) return;
       unlocked = true;
       if (!audio) audio = createRainLoop();
-      if (active) await playRainLoop(audio);
+      if (look === 'city') await playRainLoop(audio);
     },
     destroy() {
       observer.disconnect();
