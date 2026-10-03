@@ -23,50 +23,29 @@ button { font: inherit; cursor: pointer; }
 .scene[data-scene="4"] { background: #4e7eb4; color: #f4f7fb; }
 .scene[data-scene="4"] #sceneCanvas,
 .scene[data-scene="4"] #snowAir { display: block; }
-.scene[data-scene="4"] .bench-entry {
-  z-index: 2;
-  border-color: rgba(255, 255, 255, 0.45);
-  background: rgba(70, 96, 130, 0.28);
-  color: #f4f7fb;
-}
-.scene[data-scene="3"] .bench-entry {
-  z-index: 2;
-  border-color: rgba(255, 255, 255, 0.35);
-  background: rgba(0, 80, 170, 0.28);
-  color: #f4f7fb;
-}
-.scene-mark {
-  position: fixed;
-  z-index: 2;
-  top: 22px;
-  left: 26px;
-  font-size: 22px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0;
-}
-.scene[data-scene="1"] .bench-entry {
-  z-index: 2;
-  border-color: rgba(255, 255, 255, 0.35);
-  background: rgba(7, 19, 28, 0.35);
-  color: #f4f7fb;
-}
-.scene[data-scene="2"] .scene-mark,
-.scene[data-scene="2"] .bench-entry { visibility: hidden; }
 .bench-entry {
   position: fixed;
   z-index: 2;
   top: 16px;
   right: 16px;
-  padding: 6px 10px;
-  border: 1px solid #d0d0d0;
-  border-radius: 6px;
-  background: #fff;
-  color: #333;
-  font-size: 12px;
-  line-height: 1.2;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
+  transition: background-color 0.2s ease, transform 0.2s ease;
 }
-.bench-entry:hover { border-color: #111; color: #111; }
+.bench-entry svg { display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.bench-entry:hover { background: rgba(255, 255, 255, 0.28); }
+.bench-entry:active { transform: scale(0.94); }
+.bench-entry:focus-visible { outline: 2px solid rgba(255, 255, 255, 0.85); outline-offset: 2px; }
 
 .bench {
   width: min(420px, calc(100% - 32px));
