@@ -1,6 +1,6 @@
 # Lumen 固件（Windows + Arduino IDE 2.x）
 
-ESP32-S3 本地调试固件：四个按键直接切到场景 1–4，串口打印 `SCENE:n`，并通过 BLE Nordic UART Notify 把同一行发给网页。已在 Arduino IDE 2.3.10 + **esp32 by Espressif 3.3.11** 上验证；任意 **3.3.x** 均可。
+ESP32-S3 本地调试固件：四个按键或 **1–4 下拍手** 都走同一条切场路径（场景、对应 LED、OLED、串口 `SCENE:n`、BLE Notify）。已在 Arduino IDE 2.3.10 + **esp32 by Espressif 3.3.11** 上验证；任意 **3.3.x** 均可。
 
 ## 安装 Arduino IDE 与 esp32 开发板包
 
@@ -44,6 +44,7 @@ ESP32-S3 本地调试固件：四个按键直接切到场景 1–4，串口打�
 
 ```text
 BLE ADV Lumen-XXXX
+MIC INMP441 SCK=G15 WS=G16 SD=G17
 LUMEN READY
 SCENE:1
 ```
@@ -67,6 +68,10 @@ SCENE:1
 | OLED SDA | **GPIO8** | SSD1306 SDA |
 | OLED SCL | **GPIO9** | SSD1306 SCL |
 | OLED 电源 | 3V3 / GND | VCC / GND |
+| INMP441 SCK | **G15**（GPIO15） | 麦克风 SCK / BCLK |
+| INMP441 WS | **G16**（GPIO16） | 麦克风 WS |
+| INMP441 SD | **G17**（GPIO17） | 麦克风 SD |
+| INMP441 L/R | **GND** | 左声道；VDD 接 **3V3**（不要 5V） |
 
 四颗黄灯：长脚是阳极，经 220 Ω 接到 G10–G13；短脚接到面包板 **GND 地排**（不要接到 3V3）。同一时刻只有当前场景那一颗灯亮，切场时其余三颗立刻灭。
 
@@ -76,7 +81,7 @@ SCENE:1
 
 OLED 为 **SSD1306 128×64 I2C**（地址多为 `0x3C`）。没接屏幕时固件照常跑，只走串口。
 
-引脚常量在 `lumen_app/config.h` 顶部：`PIN_BTN1`–`PIN_BTN4`、`PIN_LED1`–`PIN_LED4`、`PIN_SDA`、`PIN_SCL`。
+引脚常量在 `lumen_app/config.h` 顶部：`PIN_BTN1`–`PIN_BTN4`、`PIN_LED1`–`PIN_LED4`、`PIN_SDA`、`PIN_SCL`、`PIN_I2S_SCK` / `PIN_I2S_WS` / `PIN_I2S_SD`。
 
 ## 串口协议 `SCENE:n`
 
@@ -89,20 +94,20 @@ SCENE:3
 SCENE:4
 ```
 
-BTNn 直接切到场景 n，并刷新 OLED 占位数字、点亮对应 LED。上电默认场景 1。
+BTNn 或一串 **n 下拍手**（n=1–4）都直接切到场景 n，并刷新 OLED 占位数字、点亮对应 LED。上电默认场景 1。拍手检测在 `clap_detector`：组内间隔 150–600 ms，组结束后再安静 600 ms 打印 `CLAPS:n` 再切场；超过 4 下打印 `CLAPS_DROP n=` 且不切。详细测法见 [`lumen_app/README_zh.md`](lumen_app/README_zh.md)。
 
 ## 场景灯光（怎么确认接对了）
 
 每颗 LED 只跟自己的场景走，效果都在该场景的 `loop()` 里用 `millis()` 做，没有 `delay()`。切到别的场景时，另外三颗会马上灭。
 
-| 场景 | 按键 / 串口 | LED | 灯光 | 怎么看是对的 |
+| 场景 | 按键 / 拍手 / BLE | LED | 灯光 | 怎么看是对的 |
 | --- | --- | --- | --- | --- |
 | 1 | BTN1 / `SCENE:1` | G10 | 雨滴闪：随机间隔、随机亮度的短闪，然后熄灭再闪 | 只有 LED1 在不规则地亮一下；LED2–4 全灭 |
 | 2 | BTN2 / `SCENE:2` | G11 | 鼓点：约每秒 2 下，起来很快、落下也快 | LED2 有节奏地「敲」一下；其余灭 |
 | 3 | BTN3 / `SCENE:3` | G12 | 慢呼吸：约 3–4 秒一个来回，中间过渡做了伽马校正 | LED3 匀速地亮—暗循环，没有阶梯感；其余灭 |
 | 4 | BTN4 / `SCENE:4` | G13 | 常亮（亮度压过，不刺眼） | LED4 稳定亮着不动；其余灭 |
 
-验证：上电应只有 LED1 在闪。按 BTN2 / BTN3 / BTN4（或用 nRF Connect 往 BLE RX 写 `SCENE:n`），对应灯立刻换成上面那种效果，前一颗马上灭。OLED 数字和串口打印的 `SCENE:n` 必须一起变。串口只输出这一行，不读命令。
+验证：上电应只有 LED1 在闪。按 BTN2 / BTN3 / BTN4、连拍 2/3/4 下，或用 nRF Connect 往 BLE RX 写 `SCENE:n`，对应灯立刻换成上面那种效果，前一颗马上灭。OLED 数字和串口打印的 `SCENE:n` 必须一起变。串口不读命令；拍手成功时会多一行 `CLAPS:n`。
 
 BLE 使用 Nordic UART：服务 `6e400001-b5a3-f393-e0a9-e50e24dcca9e`，TX/Notify `6e400003-b5a3-f393-e0a9-e50e24dcca9e`，RX/Write `6e400002-b5a3-f393-e0a9-e50e24dcca9e`。通知同样是 `SCENE:n` 这一行（以 `\n` 结尾），和网页解析格式一致。
 
@@ -115,7 +120,7 @@ BLE 使用 Nordic UART：服务 `6e400001-b5a3-f393-e0a9-e50e24dcca9e`，TX/Noti
 3. 点右上角 **调试**，再点 **连接 Lumen 按键**（或「连接设备」）。
 4. 在弹出的设备列表里选 **Lumen-XXXX**（串口监视器里 `BLE ADV` 那一行就是这个名字）。
 5. 网页状态应变为「Lumen 已连接」，串口打印 `BLE CONNECTED`。连接成功后固件会立刻 Notify 当前场景（上电默认 `SCENE:1`）。
-6. 按板上 **BTN1–BTN4**：OLED/串口切场景，对应 LED 亮、其余灭，网页应跟着切到场景 1–4。
+6. 按板上 **BTN1–BTN4**，或连拍 1–4 下（组与组隔开约 2 秒）：OLED/串口切场景，对应 LED 亮、其余灭，网页应跟着切到场景 1–4。
 
 ### 连不上时
 
@@ -123,11 +128,11 @@ BLE 使用 Nordic UART：服务 `6e400001-b5a3-f393-e0a9-e50e24dcca9e`，TX/Noti
 - 关掉手机 nRF Connect、串口调试助手或其他已经连着这块板的 BLE 软件；Windows 同时只允许一个中央设备连接。
 - 必须用 **HTTPS** 页面（上面的 Vercel 地址即可）。`file://` 或普通 http 不能用 Web Bluetooth。
 - 只认名字以 `Lumen-` 开头的设备。如果列表是空的：看串口是否已有 `BLE ADV Lumen-XXXX`，板子是否已上电，笔记本是否离板子太远。
-- 网页当前**不会**往 RX 写命令；切场只靠板上按键。若用 nRF Connect 向 RX 写入 `SCENE:3` 或 `SCENE:3\n`，固件也会切到场景 3。
+- 网页当前**不会**往 RX 写命令；切场靠板上按键或拍手。若用 nRF Connect 向 RX 写入 `SCENE:3` 或 `SCENE:3\n`，固件也会切到场景 3。
 
-## INMP441 麦克风测试（独立草图，主程序未改）
+## INMP441 麦克风测试（独立草图）
 
-这是单独的测试草图 `firmware/mic_test/mic_test.ino`，只用来确认 I2S 麦克风有没有接对、串口有没有数字在跳。**主程序 `firmware/lumen_app` 没有改动。** 测完麦以后，重新打开并上传 `lumen_app.ino` 即可回到四个场景的固件。
+这是单独的测试草图 `firmware/mic_test/mic_test.ino`，只用来确认 I2S 麦克风有没有接对、串口有没有数字在跳。主程序 `firmware/lumen_app` 用同样的引脚（G15/G16/G17），拍手检测在它自己的 `clap_detector` 里。测完麦以后，重新打开并上传 `lumen_app.ino` 即可回到四个场景的固件（含拍手切场）。
 
 需要 **esp32 by Espressif 3.3.x**（本仓库按 **3.3.11** 验证；装的是国内镜像的 **3.3.10-cn** 也可以）。草图用的是 3.x 的 `ESP_I2S.h` / `I2SClass`，不要用旧的 `driver/i2s.h` 示例去改它。
 

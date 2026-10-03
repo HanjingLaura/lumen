@@ -3,6 +3,7 @@
 // Using the TTL/CH340 USB port: Tools > USB CDC On Boot: Disabled.
 
 #include "ble_link.h"
+#include "clap_detector.h"
 #include "config.h"
 #include "hw_display.h"
 #include "hw_leds.h"
@@ -62,6 +63,7 @@ void setup() {
   displayBegin();  // if no OLED, serial-only still works
   ledsBegin();
   bleBegin();
+  clapBegin();  // I2S 失败也不挂起，按键/BLE 照常
 
   Serial.println("LUMEN READY");
   enterScene(0);  // boot scene 1
@@ -73,6 +75,11 @@ void loop() {
   uint8_t rxScene = 0;
   if (bleTakeRxScene(&rxScene) && rxScene >= 1 && rxScene <= SCENE_COUNT) {
     enterScene(rxScene - 1);
+  }
+  // CLAPS:n → 与按 BTNn 同一条 enterScene() 路径（LED / OLED / 串口 SCENE:n / BLE）
+  const uint8_t clapScene = clapPoll();
+  if (clapScene >= 1 && clapScene <= SCENE_COUNT) {
+    enterScene(clapScene - 1);
   }
   SCENES[sceneIndex].loop();
 }
