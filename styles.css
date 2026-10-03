@@ -19,10 +19,9 @@ button { font: inherit; cursor: pointer; }
 #skyCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
 .scene[data-scene="3"] { background: #0075ff; color: #f4f7fb; }
 .scene[data-scene="3"] #skyCanvas { display: block; }
-#snowCanvas, #snowAir { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
-#snowAir { z-index: 1; pointer-events: none; }
+#snowAir { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; display: none; pointer-events: none; }
 .scene[data-scene="4"] { background: #4e7eb4; color: #f4f7fb; }
-.scene[data-scene="4"] #snowCanvas,
+.scene[data-scene="4"] #sceneCanvas,
 .scene[data-scene="4"] #snowAir { display: block; }
 .scene[data-scene="4"] .bench-entry {
   z-index: 2;

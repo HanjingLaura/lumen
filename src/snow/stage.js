@@ -1,6 +1,4 @@
-import { paintSnowNight } from './background.js';
 import { createSnowLoop, hushSnowLoop, playSnowLoop } from './audio.js';
-import { mountGlass } from '../rain/stage.js';
 
 function makeSoftSprite() {
   const size = 64;
@@ -30,16 +28,7 @@ function spawnAir(width, height) {
   };
 }
 
-export function mountSnow(canvas, airCanvas) {
-  const glass = mountGlass(canvas, {
-    paint: paintSnowNight,
-    createLoop: createSnowLoop,
-    playLoop: playSnowLoop,
-    hushLoop: hushSnowLoop,
-    errorId: 'snowError',
-    defer: true,
-  });
-
+export function mountSnow(canvas) {
   const sprite = makeSoftSprite();
   const air = [];
   let width = 1;
@@ -48,17 +37,19 @@ export function mountSnow(canvas, airCanvas) {
   let raf = 0;
   let last = performance.now();
   let wind = 0.2;
+  let audio = null;
+  let unlocked = false;
 
   function resize() {
-    const bounds = airCanvas.getBoundingClientRect();
+    const bounds = canvas.getBoundingClientRect();
     const nextWidth = Math.max(1, Math.round(bounds.width || window.innerWidth));
     const nextHeight = Math.max(1, Math.round(bounds.height || window.innerHeight));
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const pixelWidth = Math.round(nextWidth * dpr);
     const pixelHeight = Math.round(nextHeight * dpr);
-    if (airCanvas.width !== pixelWidth || airCanvas.height !== pixelHeight) {
-      airCanvas.width = pixelWidth;
-      airCanvas.height = pixelHeight;
+    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
     }
     width = nextWidth;
     height = nextHeight;
@@ -95,13 +86,12 @@ export function mountSnow(canvas, airCanvas) {
     resize();
     fillAir();
     step(dt);
-    const context = airCanvas.getContext('2d');
-    const scale = airCanvas.width / width;
+    const context = canvas.getContext('2d');
+    const scale = canvas.width / width;
     context.setTransform(scale, 0, 0, scale, 0, 0);
     context.clearRect(0, 0, width, height);
     for (const flake of air) {
-      const alpha = flake.depth > 0.78 ? 0.9 : 0.18 + flake.depth * 0.45;
-      context.globalAlpha = alpha;
+      context.globalAlpha = flake.depth > 0.78 ? 0.9 : 0.18 + flake.depth * 0.45;
       const size = flake.size * (flake.depth > 0.78 ? 1.35 : 0.7 + flake.depth);
       context.drawImage(sprite, flake.x - size, flake.y - size, size * 2, size * 2);
     }
@@ -110,9 +100,8 @@ export function mountSnow(canvas, airCanvas) {
   }
 
   return {
-    async setActive(next) {
+    setActive(next) {
       active = next;
-      await glass?.setActive(next);
       if (next && !raf) {
         last = performance.now();
         resize();
@@ -121,13 +110,18 @@ export function mountSnow(canvas, airCanvas) {
       } else if (!next && raf) {
         cancelAnimationFrame(raf);
         raf = 0;
-        const context = airCanvas.getContext('2d');
+        const context = canvas.getContext('2d');
         context.setTransform(1, 0, 0, 1, 0, 0);
-        context.clearRect(0, 0, airCanvas.width, airCanvas.height);
+        context.clearRect(0, 0, canvas.width, canvas.height);
       }
+      if (next && unlocked) playSnowLoop(audio);
+      else hushSnowLoop(audio);
     },
-    unlock() {
-      return glass?.unlock();
+    async unlock() {
+      if (unlocked) return;
+      unlocked = true;
+      if (!audio) audio = createSnowLoop();
+      if (active) await playSnowLoop(audio);
     },
   };
 }

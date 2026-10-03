@@ -10,7 +10,7 @@ const $ = (selector) => document.querySelector(selector);
 const state = { sceneId: 1, buttonId: 1, source: 'Mock', buttonMap: loadButtonMap() };
 const rain = mountRain($('#sceneCanvas'));
 const clouds = mountClouds($('#skyCanvas'));
-const snow = mountSnow($('#snowCanvas'), $('#snowAir'));
+const snow = mountSnow($('#snowAir'));
 
 function announce(message) {
   $('#toast').textContent = message;
@@ -24,7 +24,8 @@ function activateScene(sceneId, source = 'Mock', buttonId = null) {
   state.buttonId = buttonId;
   $('#sceneMark').textContent = String(scene.id);
   $('#scene').dataset.scene = String(scene.id);
-  rain?.setActive(scene.id === 1);
+  const glass = scene.id === 1 ? 'city' : scene.id === 4 ? 'snow' : null;
+  rain?.setLook(glass);
   setSkyActive(scene.id === 2);
   clouds?.setActive(scene.id === 3);
   snow?.setActive(scene.id === 4);

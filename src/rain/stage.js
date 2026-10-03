@@ -1,7 +1,8 @@
 import { paintNightCity } from './background.js';
+import { paintSnowNight } from '../snow/background.js';
 import { createRainLoop, hushRainLoop, playRainLoop } from './audio.js';
 
-export function mountGlass(canvas, { paint, createLoop, playLoop, hushLoop, errorId, defer = false }) {
+export function mountRain(canvas) {
   const RaindropFX = window.RaindropFX;
   if (!RaindropFX) return null;
 
@@ -9,9 +10,12 @@ export function mountGlass(canvas, { paint, createLoop, playLoop, hushLoop, erro
   let running = false;
   let ready = false;
   let booting = null;
-  let active = false;
+  let look = null;
+  let request = 0;
   let audio = null;
   let unlocked = false;
+  let city = null;
+  let snow = null;
 
   function viewSize() {
     const bounds = canvas.getBoundingClientRect();
@@ -19,6 +23,13 @@ export function mountGlass(canvas, { paint, createLoop, playLoop, hushLoop, erro
       width: Math.max(1, Math.round(bounds.width)),
       height: Math.max(1, Math.round(bounds.height)),
     };
+  }
+
+  function plate(paint) {
+    const canvasPlate = document.createElement('canvas');
+    canvasPlate.width = 1600;
+    canvasPlate.height = 900;
+    return paint(canvasPlate);
   }
 
   async function boot() {
@@ -31,26 +42,24 @@ export function mountGlass(canvas, { paint, createLoop, playLoop, hushLoop, erro
       }
       canvas.width = size.width;
       canvas.height = size.height;
-      const plate = document.createElement('canvas');
-      plate.width = 1600;
-      plate.height = 900;
-      const background = paint(plate);
+      city = plate(paintNightCity);
+      snow = plate(paintSnowNight);
       effect = new RaindropFX({
         canvas,
-        background,
+        background: city,
         backgroundBlurSteps: 2,
       });
       await effect.start();
       ready = true;
       running = true;
-      if (!active) {
+      if (!look) {
         effect.stop();
         running = false;
       }
     })().catch((error) => {
       console.error(error);
       const note = document.createElement('p');
-      note.id = errorId;
+      note.id = 'rainError';
       note.textContent = error?.message || String(error);
       note.style.cssText = 'position:fixed;left:24px;bottom:24px;z-index:3;color:#fff;font:14px sans-serif;';
       document.body.appendChild(note);
@@ -73,26 +82,31 @@ export function mountGlass(canvas, { paint, createLoop, playLoop, hushLoop, erro
   }
 
   const observer = new ResizeObserver(() => {
-    if (!effect || !ready || !active) return;
+    if (!effect || !ready || !look) return;
     const { width, height } = viewSize();
     if (width < 2 || height < 2) return;
     effect.resize(width, height);
   });
   observer.observe(canvas);
-  if (!defer) boot();
+  boot();
 
   return {
-    async setActive(next) {
-      active = next;
-      await setRunning(next);
-      if (next && unlocked) await playLoop(audio);
-      else hushLoop(audio);
+    async setLook(next) {
+      const ticket = ++request;
+      const showing = next === 'city' || next === 'snow';
+      look = showing ? next : null;
+      await setRunning(showing);
+      if (ticket !== request) return;
+      if (showing && effect) await effect.setBackground(next === 'snow' ? snow : city);
+      if (ticket !== request) return;
+      if (next === 'city' && unlocked) await playRainLoop(audio);
+      else hushRainLoop(audio);
     },
     async unlock() {
       if (unlocked) return;
       unlocked = true;
-      if (!audio) audio = createLoop();
-      if (active) await playLoop(audio);
+      if (!audio) audio = createRainLoop();
+      if (look === 'city') await playRainLoop(audio);
     },
     destroy() {
       observer.disconnect();
@@ -100,14 +114,4 @@ export function mountGlass(canvas, { paint, createLoop, playLoop, hushLoop, erro
       audio?.context.close();
     },
   };
-}
-
-export function mountRain(canvas) {
-  return mountGlass(canvas, {
-    paint: paintNightCity,
-    createLoop: createRainLoop,
-    playLoop: playRainLoop,
-    hushLoop: hushRainLoop,
-    errorId: 'rainError',
-  });
 }
